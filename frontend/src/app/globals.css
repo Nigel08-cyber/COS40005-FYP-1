@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/*
+  VolunteerHub design tokens (from the low-fidelity wireframes).
+  Colour roles follow the wireframe conventions:
+  - brand / AI recommendation  -> blue
+  - success / approved / checked in -> green
+  - pending / warning / skills gap -> amber
+  - error / full / suspended -> red
+*/
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  --color-ink: #111827;
+  --color-ink-soft: #374151;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+
+  --color-brand: #4457df;
+  --color-brand-hover: #3546c8;
+  --color-brand-soft: #eef1fe;
+  --color-brand-line: #c9d1fb;
+  --color-brand-bar: #b9c3f6;
+
+  --color-success: #1f8a4c;
+  --color-success-soft: #e6f6ec;
+  --color-warning: #b86200;
+  --color-warning-soft: #fff3e0;
+  --color-danger: #c53030;
+  --color-danger-soft: #fde8e8;
+
+  --color-placeholder: #e5e7eb;
+
+  /* One easing curve for every transition so the whole app moves the same way */
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Default motion for anything interactive: colour, shadow and position ease together */
+@layer base {
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  label {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 200ms;
+    transition-timing-function: var(--ease-smooth);
+  }
+
+  button:not(:disabled),
+  [role="button"],
+  select,
+  label[for],
+  input[type="checkbox"] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  input[type="range"] {
+    accent-color: var(--color-brand);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

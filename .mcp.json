@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@1.11.0", "--no-usage-statistics"]
+    },
+    "codebase-memory-mcp": {
+      "command": "npx",
+      "args": ["-y", "codebase-memory-mcp@0.12.1"]
+    }
+  }
+}
