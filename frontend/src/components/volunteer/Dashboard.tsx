@@ -5,10 +5,22 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { cx, daysBetween, formatShortDate, formatTime } from "@/lib/format";
 import type { Certificate, ContributionRecord, MonthlyHours, Opportunity } from "@/lib/types";
 import { CHECK_IN_WINDOW_DAYS } from "./MyActivities";
 import { useVolunteer } from "./VolunteerProvider";
+
+/** "Welcome back, <first name>" using the signed-in account. */
+export function WelcomeHeader() {
+  const { volunteer } = useVolunteer();
+  return (
+    <PageHeader
+      title={volunteer.firstName ? `Welcome back, ${volunteer.firstName}` : "Welcome back"}
+      subtitle="Here is your volunteer impact so far."
+    />
+  );
+}
 
 const UPCOMING_LIMIT = 2;
 const RECOMMENDED_LIMIT = 2;

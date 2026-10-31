@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { isLoggedIn } from "@/lib/api/auth";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { initialsOf, useSessionGuard } from "@/lib/useSessionGuard";
 import type { Application, ApplicationStatus, Opportunity, Volunteer } from "@/lib/types";
 
 type Action = "apply" | "withdraw" | "register" | "cancel" | "joinWaitlist" | "leaveWaitlist";
@@ -65,11 +65,23 @@ export function VolunteerProvider({
   const [statuses, setStatuses] = useState<Record<string, ApplicationStatus>>(() =>
     Object.fromEntries(initialApplications.map((a) => [a.opportunityId, a.status])),
   );
-  // Signed out (or never signed in)? Send the visitor to the login page.
-  // TODO(backend): replace with a real session check, ideally on the server.
-  useEffect(() => {
-    if (!isLoggedIn()) window.location.replace("/login");
-  }, []);
+  // Real login check: signed-out visitors go to /login, other roles to their own pages
+  const sessionUser = useSessionGuard(["volunteer"]);
+  // Name and email come from the real account; the rest of `volunteer` is still FAKE data
+  const shownVolunteer = useMemo<Volunteer>(
+    () =>
+      sessionUser
+        ? {
+            ...volunteer,
+            id: String(sessionUser.id),
+            fullName: sessionUser.fullName,
+            firstName: sessionUser.fullName.split(/\s+/)[0] ?? sessionUser.fullName,
+            initials: initialsOf(sessionUser.fullName),
+            email: sessionUser.email,
+          }
+        : { ...volunteer, fullName: "", firstName: "", initials: "", email: "" },
+    [sessionUser, volunteer],
+  );
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
@@ -82,7 +94,7 @@ export function VolunteerProvider({
 
   const value = useMemo<VolunteerContextValue>(
     () => ({
-      volunteer,
+      volunteer: shownVolunteer,
       statusOf: (id) => statuses[id] ?? "none",
       act: (id, action) => {
         // TODO(backend): call the API (apply / withdraw / register / cancel / waitlist) and only
@@ -93,7 +105,7 @@ export function VolunteerProvider({
       registeredCount: (o) => o.volunteersRegisteredOthers + (statuses[o.id] === "registered" ? 1 : 0),
       notify,
     }),
-    [volunteer, statuses, notify],
+    [shownVolunteer, statuses, notify],
   );
 
   return (

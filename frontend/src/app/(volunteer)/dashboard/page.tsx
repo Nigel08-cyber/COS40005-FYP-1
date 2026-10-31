@@ -1,18 +1,17 @@
 import type { Metadata } from "next";
 import { SkillTag } from "@/components/ui/Badge";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
   CertificatesCard,
   ContributionHistory,
   HoursChart,
   RecommendedCard,
   UpcomingCard,
+  WelcomeHeader,
 } from "@/components/volunteer/Dashboard";
 import {
   getCertificates,
   getContributionHistory,
-  getCurrentVolunteer,
   getMonthlyHours,
   getOpportunities,
   getSkillsContributed,
@@ -23,8 +22,7 @@ import {
 export const metadata: Metadata = { title: "Dashboard · VolunteerHub" };
 
 export default async function DashboardPage() {
-  const [volunteer, stats, opportunities, history, monthly, skills, certificates] = await Promise.all([
-    getCurrentVolunteer(),
+  const [stats, opportunities, history, monthly, skills, certificates] = await Promise.all([
     getVolunteerStats(),
     getOpportunities(),
     getContributionHistory(),
@@ -42,7 +40,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={`Welcome back, ${volunteer.firstName}`} subtitle="Here is your volunteer impact so far." />
+      <WelcomeHeader />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statTiles.map((s) => (
