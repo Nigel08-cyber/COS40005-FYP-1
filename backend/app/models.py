@@ -131,6 +131,12 @@ class Project(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Numeric(9, 6, asdecimal=False), nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Numeric(9, 6, asdecimal=False), nullable=True)
+    preferred_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)  # 1 = Monday .. 7 = Sunday
+    preferred_start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    preferred_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    min_experience_years: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     volunteers_needed: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | active | completed | cancelled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -31,10 +31,13 @@ class LoginIn(BaseModel):
 
 class UserOut(BaseModel):
     user_id: int
+    id: int  # same as user_id (the frontend's name for it)
     email: str
     full_name: str
     system_role: str
     roles: list[str]  # effective roles: system_admin, ngo_admin, project_coordinator, volunteer
+    role: str  # the highest of `roles` (used to pick the landing page); a user with no role yet is an NGO admin
+    #            who has not created an organisation
 
 
 class TokenOut(BaseModel):
@@ -416,3 +419,31 @@ class ActivityOut(BaseModel):
     end_datetime: datetime
     registration_status: str  # registered | waitlisted
     hours: float | None = None  # past activities: hours contributed
+
+
+# ---------- Opportunities (volunteer browse view: a project + its next event + the NGO) ----------
+
+class OpportunityOut(BaseModel):
+    project_id: int
+    event_id: int | None           # the next upcoming active event; registrations go to this event
+    title: str
+    description: str | None
+    category: str | None
+    ngo_id: int
+    ngo_name: str
+    ngo_state: str | None
+    location: str | None
+    venue: str | None
+    latitude: float | None
+    longitude: float | None
+    start: datetime                # UTC, naive. Next event, else the project's start date
+    end: datetime
+    volunteers_needed: int         # event capacity if set, else the project's volunteers_needed, else 0
+    registered_count: int          # registered volunteers for `event_id`
+    waitlist_count: int
+    skills: list[str]
+    min_experience_years: int | None
+    preferred_day: int | None
+    preferred_start_time: time | None
+    preferred_end_time: time | None
+    distance_km: float | None      # from the volunteer's saved coordinates, when both sides have them

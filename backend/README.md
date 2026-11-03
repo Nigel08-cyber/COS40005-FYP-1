@@ -27,7 +27,8 @@ pytest -q                                  # same suite on PostgreSQL (truncates
 ## Endpoints
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me`, `PATCH /auth/users/{id}/system-role` |
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` (user object has `user_id`/`id`, `roles[]` and the single `role` the frontend routes on), `PATCH /auth/users/{id}/system-role` |
+| Opportunities (volunteer browse) | `GET /opportunities`, `GET /opportunities/{project_id}` (active project + next event + counts + skills + distance) |
 | Volunteer profile | `GET/PUT/PATCH /me/profile`, `GET /skills`, `POST /skills` (admin) |
 | Volunteer history | `GET /me/contributions`, `/me/stats`, `/me/hours?months=6`, `/me/certificates`, `/me/activities?past=bool` |
 | NGO | `POST/GET /ngos`, `GET/PATCH /ngos/{id}`, `PATCH /ngos/{id}/status` (admin), `GET/POST /ngos/{id}/members`, `DELETE /ngos/{id}/members/{user_id}`, `GET /ngos/{id}/dashboard` |

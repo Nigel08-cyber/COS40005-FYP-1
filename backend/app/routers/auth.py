@@ -17,9 +17,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE = "refresh_token"
 
 
+_ROLE_PRIORITY = ("system_admin", "ngo_admin", "project_coordinator", "volunteer")
+
+
 def _user_out(db: Session, user: User) -> UserOut:
-    return UserOut(user_id=user.user_id, email=user.email, full_name=user.full_name,
-                   system_role=user.system_role, roles=sorted(get_roles(db, user)))
+    roles = get_roles(db, user)
+    # Only an NGO admin can self-register without a volunteer profile, so "no role yet" means "NGO admin who
+    # still has to create the organisation".
+    primary = next((r for r in _ROLE_PRIORITY if r in roles), "ngo_admin")
+    return UserOut(user_id=user.user_id, id=user.user_id, email=user.email, full_name=user.full_name,
+                   system_role=user.system_role, roles=sorted(roles), role=primary)
 
 
 def _issue(db: Session, user: User, response: Response) -> TokenOut:
