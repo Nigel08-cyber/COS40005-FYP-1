@@ -7,7 +7,7 @@ from pwdlib import PasswordHash
 
 from app.config import get_settings
 
-# Argon2id with pwdlib's recommended defaults
+# Argon2id (pwdlib recommended settings). The seeded demo accounts use the same hasher.
 _hasher = PasswordHash.recommended()
 # Verified against when the email is unknown, so login timing doesn't reveal which emails exist
 _DUMMY_HASH = _hasher.hash("not-a-real-password")
@@ -18,14 +18,18 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
-    return _hasher.verify(password, password_hash or _DUMMY_HASH) and password_hash is not None
+    try:
+        ok = _hasher.verify(password, password_hash or _DUMMY_HASH)
+    except Exception:  # unknown/corrupt hash format
+        return False
+    return ok and password_hash is not None
 
 
-def create_access_token(user_id: int, role: str) -> tuple[str, int]:
+def create_access_token(user_id: int) -> tuple[str, int]:
     s = get_settings()
     expires = timedelta(minutes=s.access_token_minutes)
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "role": role, "type": "access", "iat": now, "exp": now + expires}
+    payload = {"sub": str(user_id), "type": "access", "iat": now, "exp": now + expires}
     return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm), int(expires.total_seconds())
 
 
