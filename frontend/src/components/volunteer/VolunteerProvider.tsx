@@ -2,20 +2,20 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { isLoggedIn } from "@/lib/api/auth";
-import type { Application, ApplicationStatus, Opportunity, Volunteer } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
+import { PageSkeleton } from "@/components/volunteer/DataView";
+import {
+  applyToProject,
+  cancelRegistration,
+  getMyApplications,
+  registerForOpportunity,
+  withdrawApplication,
+} from "@/lib/api/volunteer";
+import { errorMessage } from "@/lib/api/http";
+import { initialsOf, useSessionGuard } from "@/lib/useSessionGuard";
+import type { ApplicationStatus, Opportunity, Volunteer } from "@/lib/types";
 
 type Action = "apply" | "withdraw" | "register" | "cancel" | "joinWaitlist" | "leaveWaitlist";
-
-const nextStatus: Record<Action, ApplicationStatus> = {
-  apply: "pending",
-  withdraw: "none",
-  register: "registered",
-  // Cancelling keeps the coordinator's approval, so the volunteer can register again
-  cancel: "approved",
-  joinWaitlist: "waitlisted",
-  leaveWaitlist: "none",
-};
 
 const toastText: Record<Action, string> = {
   apply: "Application sent. The coordinator will review it.",
@@ -38,6 +38,8 @@ interface VolunteerContextValue {
   /** Registered volunteers including the signed-in volunteer, if registered. */
   registeredCount: (opportunity: Opportunity) => number;
   notify: (message: string) => void;
+  /** Whether the session and the volunteer's statuses are loaded (see <VolunteerGate>) */
+  state: { phase: "loading" | "error" | "ready"; error: string | null; retry: () => void };
 }
 
 const VolunteerContext = createContext<VolunteerContextValue | null>(null);
@@ -48,28 +50,58 @@ export function useVolunteer() {
   return ctx;
 }
 
+/** Shows a skeleton (or an error with a retry button) until the volunteer's session and statuses are loaded. */
+export function VolunteerGate({ children }: { children: React.ReactNode }) {
+  const { state } = useVolunteer();
+  if (state.phase === "ready") return <>{children}</>;
+  if (state.phase === "error") {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-ink-soft">{state.error}</p>
+        <Button className="mt-4" onClick={state.retry}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  return <PageSkeleton />;
+}
+
 /**
- * Holds the volunteer's application statuses in memory so every page
- * (browse, details, my activities, dashboard) shows the same state.
- * When the backend exists, `act` should call the API and then update this state.
+ * Holds the volunteer's application statuses so every page (browse, details, my activities, dashboard)
+ * shows the same state. `act` calls the API and only updates the status after it succeeds.
+ * Wrap the page content in <VolunteerGate> so it only renders once the session and statuses are loaded.
  */
-export function VolunteerProvider({
-  volunteer,
-  initialApplications,
-  children,
-}: {
-  volunteer: Volunteer;
-  initialApplications: Application[];
-  children: React.ReactNode;
-}) {
-  const [statuses, setStatuses] = useState<Record<string, ApplicationStatus>>(() =>
-    Object.fromEntries(initialApplications.map((a) => [a.opportunityId, a.status])),
-  );
-  // Signed out (or never signed in)? Send the visitor to the login page.
-  // TODO(backend): replace with a real session check, ideally on the server.
+export function VolunteerProvider({ children }: { children: React.ReactNode }) {
+  // Login check: signed-out visitors go to /login, other roles to their own pages
+  const sessionUser = useSessionGuard(["volunteer"]);
+  const [statuses, setStatuses] = useState<Record<string, ApplicationStatus> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const busy = useRef(new Set<string>());
+
   useEffect(() => {
-    if (!isLoggedIn()) window.location.replace("/login");
-  }, []);
+    if (!sessionUser) return;
+    let cancelled = false;
+    getMyApplications()
+      .then((apps) => !cancelled && setStatuses(Object.fromEntries(apps.map((a) => [a.opportunityId, a.status]))))
+      .catch((e) => !cancelled && setLoadError(errorMessage(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionUser, attempt]);
+
+  const shownVolunteer = useMemo<Volunteer>(
+    () => ({
+      id: String(sessionUser?.id ?? ""),
+      fullName: sessionUser?.fullName ?? "",
+      firstName: sessionUser?.fullName.split(/\s+/)[0] ?? "",
+      initials: sessionUser ? initialsOf(sessionUser.fullName) : "",
+      email: sessionUser?.email ?? "",
+      roleLabel: "Volunteer",
+    }),
+    [sessionUser],
+  );
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
@@ -80,20 +112,55 @@ export function VolunteerProvider({
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
+  const act = useCallback(
+    async (id: string, action: Action) => {
+      if (busy.current.has(id)) return; // ignore double clicks while a request is running
+      busy.current.add(id);
+      try {
+        let next: ApplicationStatus;
+        let message = toastText[action];
+        if (action === "apply") {
+          await applyToProject(id);
+          next = "pending";
+        } else if (action === "withdraw") {
+          await withdrawApplication(id);
+          next = "none";
+        } else if (action === "register" || action === "joinWaitlist") {
+          // A full event puts the volunteer on the waitlist, whichever button was pressed
+          next = await registerForOpportunity(id);
+          if (next === "waitlisted") message = toastText.joinWaitlist;
+        } else {
+          await cancelRegistration(id);
+          next = "approved"; // the coordinator's approval stays, so the volunteer can register again
+        }
+        setStatuses((s) => ({ ...s, [id]: next }));
+        notify(message);
+      } catch (e) {
+        notify(errorMessage(e));
+      } finally {
+        busy.current.delete(id);
+      }
+    },
+    [notify],
+  );
+
   const value = useMemo<VolunteerContextValue>(
     () => ({
-      volunteer,
-      statusOf: (id) => statuses[id] ?? "none",
-      act: (id, action) => {
-        // TODO(backend): call the API (apply / withdraw / register / cancel / waitlist) and only
-        // update the status after it succeeds. Right now the change lives in memory only.
-        setStatuses((s) => ({ ...s, [id]: nextStatus[action] }));
-        notify(toastText[action]);
-      },
-      registeredCount: (o) => o.volunteersRegisteredOthers + (statuses[o.id] === "registered" ? 1 : 0),
+      volunteer: shownVolunteer,
+      statusOf: (id) => statuses?.[id] ?? "none",
+      act: (id, action) => void act(id, action),
+      registeredCount: (o) => o.volunteersRegisteredOthers + (statuses?.[o.id] === "registered" ? 1 : 0),
       notify,
+      state: {
+        phase: loadError ? "error" : sessionUser !== null && statuses !== null ? "ready" : "loading",
+        error: loadError,
+        retry: () => {
+          setLoadError(null);
+          setAttempt((n) => n + 1);
+        },
+      },
     }),
-    [volunteer, statuses, notify],
+    [shownVolunteer, statuses, act, notify, sessionUser, loadError],
   );
 
   return (

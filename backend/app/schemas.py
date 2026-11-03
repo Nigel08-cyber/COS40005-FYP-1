@@ -97,6 +97,10 @@ class ProjectIn(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     volunteers_needed: int | None = Field(default=None, gt=0)
+    min_experience_years: int | None = Field(default=None, ge=0, le=60)
+    preferred_day: int | None = Field(default=None, ge=1, le=7)  # 1 = Monday .. 7 = Sunday
+    preferred_start_time: time | None = None
+    preferred_end_time: time | None = None
     coordinator_id: int | None = None
     status: ProjectStatus = "draft"
 
@@ -113,7 +117,12 @@ class ProjectOut(BaseModel):
     start_date: date | None
     end_date: date | None
     volunteers_needed: int | None
+    min_experience_years: int | None = None
+    preferred_day: int | None = None
+    preferred_start_time: time | None = None
+    preferred_end_time: time | None = None
     status: str
+    created_at: datetime | None = None
 
 
 class ProjectStatusIn(BaseModel):
@@ -211,6 +220,10 @@ class ProjectUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     volunteers_needed: int | None = Field(default=None, gt=0)
+    min_experience_years: int | None = Field(default=None, ge=0, le=60)
+    preferred_day: int | None = Field(default=None, ge=1, le=7)  # 1 = Monday .. 7 = Sunday
+    preferred_start_time: time | None = None
+    preferred_end_time: time | None = None
 
 
 class CoordinatorIn(BaseModel):

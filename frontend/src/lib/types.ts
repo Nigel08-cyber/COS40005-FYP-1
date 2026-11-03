@@ -6,7 +6,8 @@ export type Category =
   | "Environment"
   | "Fundraising"
   | "Disaster assistance"
-  | "Health";
+  | "Health"
+  | "Community outreach";
 
 export type Language = "English" | "Bahasa Malaysia" | "Mandarin" | "Tamil";
 
@@ -34,7 +35,10 @@ export interface Opportunity {
   area: string;
   state: string;
   address: string;
-  distanceKm: number;
+  /** null when the volunteer or the project has no saved location */
+  distanceKm: number | null;
+  /** The event that Register / Cancel act on (the next upcoming one), if the project has one */
+  eventId?: number | null;
   skills: string[];
   volunteersNeeded: number;
   /** Registered volunteers, not counting the signed-in volunteer */

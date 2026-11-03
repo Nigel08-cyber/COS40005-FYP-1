@@ -10,12 +10,12 @@ export const metadata: Metadata = { title: "VolunteerHub · Community Volunteer 
 // Wireframe 00 – Cover & index. `href` is set for screens that are already built.
 const screens: { no: string; title: string; href?: string }[] = [
   { no: "09", title: "Volunteer registration / profile", href: "/login" },
-  { no: "10", title: "NGO / organisation profile creation" },
+  { no: "10", title: "NGO / organisation profile creation", href: "/ngo/profile" },
   { no: "11", title: "Browse opportunities · details · my activities", href: "/opportunities" },
-  { no: "12", title: "Project / event creation" },
-  { no: "13", title: "NGO dashboard (+ AI analytics)" },
+  { no: "12", title: "Project / event creation", href: "/ngo/projects/new" },
+  { no: "13", title: "NGO dashboard (+ AI analytics)", href: "/ngo/dashboard" },
   { no: "14", title: "Volunteer dashboard", href: "/dashboard" },
-  { no: "15", title: "Attendance / QR check-in flow" },
+  { no: "15", title: "Attendance / QR check-in flow", href: "/coordinator/attendance" },
   { no: "16", title: "Admin panel" },
 ];
 

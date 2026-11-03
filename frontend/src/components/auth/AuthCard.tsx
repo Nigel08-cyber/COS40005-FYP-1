@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnimatedHeight } from "@/components/ui/AnimatedHeight";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/Fields";
+import { FieldError, TextField } from "@/components/ui/Fields";
 import { SLIDE_SPRING } from "@/components/ui/MotionProvider";
 import { Tabs } from "@/components/ui/Tabs";
-import { logIn, signUp } from "@/lib/api/auth";
+import { firstPageFor, homeFor, logIn, signUp } from "@/lib/api/auth";
 import { cx } from "@/lib/format";
 import type { Role } from "@/lib/types";
 
@@ -19,6 +19,11 @@ const roles: { value: Role; title: string; hint: string }[] = [
   { value: "ngo_admin", title: "NGO Administrator", hint: "Manage an organisation" },
 ];
 
+// Same limits as the backend (backend/app/schemas.py → RegisterIn)
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface Form {
   fullName: string;
   email: string;
@@ -27,44 +32,75 @@ interface Form {
   terms: boolean;
 }
 
+type Errors = Partial<Record<keyof Form, string>>;
+
+/** Checks the form before it is sent, so obvious mistakes don't need a round trip. */
+function validate(mode: Mode, f: Form): Errors {
+  const e: Errors = {};
+  if (!EMAIL_RE.test(f.email.trim())) e.email = "Please enter a valid email address.";
+  if (mode === "login") {
+    if (!f.password) e.password = "Please enter your password.";
+    return e;
+  }
+  if (!f.fullName.trim()) e.fullName = "Please enter your full name.";
+  if (f.password.length < PASSWORD_MIN) e.password = `Use at least ${PASSWORD_MIN} characters.`;
+  else if (f.password.length > PASSWORD_MAX) e.password = `Use at most ${PASSWORD_MAX} characters.`;
+  if (f.confirm !== f.password) e.confirm = "Passwords do not match.";
+  if (!f.terms) e.terms = "Please accept the Terms and Privacy Policy.";
+  return e;
+}
+
 /**
- * Log in / Sign up card (wireframe 09a).
- * Volunteers and NGO Administrators use exactly the same fields; only the role differs.
- * Uses the FAKE auth for now (src/lib/fake/authFake.ts): anything you type logs in,
- * and no validation is done here — the backend will validate once it exists.
+ * Log in / Sign up card (wireframe 09a), connected to the backend (src/lib/api/auth.ts).
+ * Volunteers and NGO Administrators sign up with the same fields; only the role differs.
+ * When logging in, the account's own role decides where the user lands.
  */
 export function AuthCard() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signup");
   const [role, setRole] = useState<Role>("volunteer");
   const [form, setForm] = useState<Form>({ fullName: "", email: "", password: "", confirm: "", terms: false });
+  const [errors, setErrors] = useState<Errors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const update = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const update = <K extends keyof Form>(key: K, value: Form[K]) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+    setFormError(null);
+  };
 
   const switchMode = (next: Mode) => {
     setMode(next);
     setNotice(null);
+    setErrors({});
+    setFormError(null);
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setNotice(null);
-    setLoading(true);
-    if (mode === "signup") {
-      await signUp({ role, fullName: form.fullName, email: form.email, password: form.password });
-    } else {
-      await logIn({ role, email: form.email, password: form.password });
-    }
-    setLoading(false);
+    setFormError(null);
+    const found = validate(mode, form);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
-    if (role === "ngo_admin") {
-      setNotice("The NGO Administrator pages are coming in a later sprint.");
+    setLoading(true);
+    const result =
+      mode === "signup"
+        ? await signUp({ role, fullName: form.fullName, email: form.email, password: form.password })
+        : await logIn({ email: form.email, password: form.password });
+
+    if (!result.ok) {
+      setLoading(false);
+      setErrors(result.error.fields ?? {});
+      setFormError(result.error.message ?? null);
       return;
     }
-    // New volunteers go on to create their profile; returning volunteers land on the dashboard
-    router.push(mode === "signup" ? "/profile" : "/dashboard");
+    // Keep the button spinning while the next page loads.
+    // New accounts go on to create their profile; returning users land on their dashboard.
+    router.push(mode === "signup" ? firstPageFor(role) : homeFor(result.user.role));
   };
 
   return (
@@ -140,6 +176,7 @@ export function AuthCard() {
                   placeholder="Aisha Rahman"
                   autoComplete="name"
                   value={form.fullName}
+                  error={errors.fullName}
                   onChange={(v) => update("fullName", v)}
                 />
               )}
@@ -151,6 +188,7 @@ export function AuthCard() {
                 placeholder="name@example.com"
                 autoComplete="email"
                 value={form.email}
+                error={errors.email}
                 onChange={(v) => update("email", v)}
               />
               <TextField
@@ -161,6 +199,7 @@ export function AuthCard() {
                 placeholder="••••••••"
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 value={form.password}
+                error={errors.password}
                 onChange={(v) => update("password", v)}
               />
               {mode === "signup" && (
@@ -173,6 +212,7 @@ export function AuthCard() {
                     placeholder="••••••••"
                     autoComplete="new-password"
                     value={form.confirm}
+                    error={errors.confirm}
                     onChange={(v) => update("confirm", v)}
                   />
                   <div>
@@ -186,10 +226,25 @@ export function AuthCard() {
                       />
                       <span className="group-hover:text-ink">I agree to the Terms and Privacy Policy</span>
                     </label>
+                    <FieldError message={errors.terms} />
                   </div>
                 </>
               )}
             </motion.div>
+          </AnimatePresence>
+
+          <AnimatePresence initial={false}>
+            {formError && (
+              <motion.p
+                role="alert"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mt-4 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger"
+              >
+                {formError}
+              </motion.p>
+            )}
           </AnimatePresence>
 
           <AnimatePresence initial={false}>
@@ -213,7 +268,7 @@ export function AuthCard() {
         <div className="mt-4 flex items-center justify-between text-xs">
           <button
             type="button"
-            onClick={() => setNotice("Password reset will be available once accounts are connected.")}
+            onClick={() => setNotice("Password reset is not available yet. Please contact your NGO administrator.")}
             className="rounded text-brand hover:text-brand-hover hover:underline"
           >
             Forgot password?

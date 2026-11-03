@@ -9,6 +9,7 @@ import { Card, CardTitle, Placeholder } from "@/components/ui/Card";
 import { Chip, Select, TextArea, TextField } from "@/components/ui/Fields";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { errorMessage } from "@/lib/api/http";
 import { saveVolunteerProfile } from "@/lib/api/volunteer";
 import { cx } from "@/lib/format";
 import type {
@@ -96,11 +97,21 @@ export function ProfileForm({
 
   const save = async () => {
     setSaving(true);
-    await saveVolunteerProfile(profile);
-    setSaving(false);
-    setSaved(profile);
-    setEditing(false);
-    notify("Profile saved.");
+    try {
+      const result = await saveVolunteerProfile(profile);
+      setProfile(result.profile);
+      setSaved(result.profile);
+      setEditing(false);
+      notify(
+        result.skipped.length
+          ? `Profile saved. Skills not in our list yet, so not saved: ${result.skipped.join(", ")}`
+          : "Profile saved.",
+      );
+    } catch (e) {
+      notify(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cancel = () => {

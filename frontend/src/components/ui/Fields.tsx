@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import { cx } from "@/lib/format";
 
 export function Select({
@@ -41,9 +42,11 @@ export function Select({
   );
 }
 
-const inputClass =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-faint outline-none " +
-  "hover:border-ink/30 focus:border-brand focus:ring-4 focus:ring-brand/10";
+const inputBase =
+  "w-full rounded-lg border bg-surface px-3 text-sm text-ink placeholder:text-faint outline-none focus:ring-4";
+const inputOk = "border-line-strong hover:border-ink/30 focus:border-brand focus:ring-brand/10";
+const inputError = "border-danger focus:border-danger focus:ring-danger/10";
+const inputClass = cx(inputBase, inputOk);
 
 export function TextField({
   id,
@@ -51,6 +54,7 @@ export function TextField({
   required,
   value,
   onChange,
+  error,
   ...input
 }: {
   id: string;
@@ -58,15 +62,47 @@ export function TextField({
   required?: boolean;
   value: string;
   onChange: (value: string) => void;
+  /** Shown under the field in red; also marks the input invalid */
+  error?: string;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  const errorId = `${id}-error`;
   return (
     <div>
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-ink">
         {label}
         {required && " *"}
       </label>
-      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} className={cx(inputClass, "h-10")} {...input} />
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        className={cx(inputBase, error ? inputError : inputOk, "h-10")}
+        {...input}
+      />
+      <FieldError id={errorId} message={error} />
     </div>
+  );
+}
+
+/** Red message that slides in under a field. */
+export function FieldError({ id, message }: { id?: string; message?: string }) {
+  return (
+    <AnimatePresence initial={false}>
+      {message && (
+        <motion.p
+          id={id}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden pt-1 text-xs text-danger"
+        >
+          {message}
+        </motion.p>
+      )}
+    </AnimatePresence>
   );
 }
 

@@ -1,20 +1,11 @@
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { BrowseOpportunities } from "@/components/volunteer/BrowseOpportunities";
-import { getOpportunities, getToday } from "@/lib/api/volunteer";
+import { OpportunitiesView } from "@/components/volunteer/views/OpportunitiesView";
 
 export const metadata: Metadata = { title: "Browse opportunities · VolunteerHub" };
 
-export default async function OpportunitiesPage() {
-  const opportunities = await getOpportunities();
+// Content is loaded client-side behind VolunteerGate (the access token lives in memory), so there is nothing to validate for instant navigation.
+export const instant = false;
 
-  return (
-    <>
-      <PageHeader
-        title="Browse opportunities"
-        subtitle="Find volunteer activities that match your skills, interests and availability."
-      />
-      <BrowseOpportunities opportunities={opportunities} today={getToday()} />
-    </>
-  );
+export default function Page() {
+  return <OpportunitiesView />;
 }
