@@ -5,13 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import applications, auth, projects
+from app.models import RefreshToken
+from app.routers import applications, auth, ngos, opportunities, projects, volunteers
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Dev convenience only. On Neon use schema.sql / Alembic instead.
-    Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(engine)  # local dev / tests only
+    else:
+        # PostgreSQL (Neon): schema.sql already owns every table. Only add the API's own table.
+        RefreshToken.__table__.create(engine, checkfirst=True)
     yield
 
 
@@ -24,8 +28,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth.router)
+app.include_router(ngos.router)
 app.include_router(projects.router)
 app.include_router(applications.router)
+app.include_router(volunteers.router)
+app.include_router(opportunities.router)
 
 
 @app.get("/health")
