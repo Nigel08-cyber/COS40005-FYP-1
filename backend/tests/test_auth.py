@@ -90,3 +90,20 @@ def test_system_role_change_is_platform_admin_only(client, db_session):
     assert client.get("/auth/me", headers=ah).json()["roles"] == ["system_admin"]
     r = client.patch(f"/auth/users/{uid}/system-role", json={"system_role": "platform_admin"}, headers=ah)
     assert r.status_code == 200 and "system_admin" in r.json()["roles"]
+
+
+def test_user_object_has_id_and_primary_role(client, db_session):
+    """The frontend reads user.id and a single user.role (login, register and /auth/me)."""
+    from tests.conftest import login, make_active_ngo, make_ngo_member, make_platform_admin
+
+    r = client.post("/auth/register", json={"full_name": "v", "email": "v@example.com", "password": "password123"}).json()["user"]
+    assert r["id"] == r["user_id"] and r["role"] == "volunteer" and r["roles"] == ["volunteer"]
+    r = client.post("/auth/register", json={"full_name": "n", "email": "n@example.com", "password": "password123", "role": "ngo_admin"}).json()["user"]
+    assert r["role"] == "ngo_admin" and r["roles"] == []          # no organisation yet
+    ngo_id, _ = make_active_ngo(db_session, "R1", "a1@example.com")
+    make_ngo_member(db_session, ngo_id, "c1@example.com", "coordinator")
+    make_platform_admin(db_session)
+    for email, expected in (("a1@example.com", "ngo_admin"), ("c1@example.com", "project_coordinator"), ("admin@example.com", "system_admin")):
+        res = client.post("/auth/login", json={"email": email, "password": "password123"}).json()
+        assert res["user"]["role"] == expected, email
+        assert client.get("/auth/me", headers=login(client, email)).json()["role"] == expected
