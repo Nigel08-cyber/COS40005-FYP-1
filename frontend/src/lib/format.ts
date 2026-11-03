@@ -67,3 +67,8 @@ export function daysBetween(from: string, to: string) {
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
+
+/** "4 km", "12.5 km" (null = unknown) */
+export function formatDistance(km: number | null) {
+  return km === null ? "" : `${Number.isInteger(km) ? km : km.toFixed(1)} km`;
+}

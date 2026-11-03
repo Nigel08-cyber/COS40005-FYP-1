@@ -1,14 +1,13 @@
 import { Navbar } from "@/components/volunteer/Navbar";
-import { VolunteerProvider } from "@/components/volunteer/VolunteerProvider";
-import { getCurrentVolunteer, getMyApplications } from "@/lib/api/volunteer";
+import { VolunteerGate, VolunteerProvider } from "@/components/volunteer/VolunteerProvider";
 
-export default async function VolunteerLayout({ children }: { children: React.ReactNode }) {
-  const [volunteer, applications] = await Promise.all([getCurrentVolunteer(), getMyApplications()]);
-
+export default function VolunteerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <VolunteerProvider volunteer={volunteer} initialApplications={applications}>
+    <VolunteerProvider>
       <Navbar />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+        <VolunteerGate>{children}</VolunteerGate>
+      </main>
     </VolunteerProvider>
   );
 }

@@ -1,0 +1,87 @@
+"use client";
+
+import { SkillTag } from "@/components/ui/Badge";
+import { Card, CardTitle } from "@/components/ui/Card";
+import {
+  CertificatesCard,
+  ContributionHistory,
+  HoursChart,
+  RecommendedCard,
+  UpcomingCard,
+  WelcomeHeader,
+} from "@/components/volunteer/Dashboard";
+import { DataView } from "@/components/volunteer/DataView";
+import {
+  getCertificates,
+  getContributionHistory,
+  getMonthlyHours,
+  getOpportunities,
+  getSkillsContributed,
+  getToday,
+  getVolunteerStats,
+} from "@/lib/api/volunteer";
+
+export function DashboardView() {
+  return (
+    <DataView
+      load={() =>
+        Promise.all([
+          getVolunteerStats(),
+          getOpportunities(),
+          getContributionHistory(),
+          getMonthlyHours(),
+          getSkillsContributed(),
+          getCertificates(),
+        ])
+      }
+    >
+      {([stats, opportunities, history, monthly, skills, certificates]) => {
+        const statTiles = [
+          { label: "Total volunteer hours", value: stats.totalHours, note: `+${stats.hoursThisMonth} hrs this month`, good: true },
+          { label: "Projects completed", value: stats.projectsCompleted, note: `${stats.upcomingThisWeek} upcoming this week` },
+          { label: "Skills contributed", value: stats.skillsContributed, note: stats.skillsPreview },
+          { label: "Certificates", value: stats.certificates, note: `${stats.certificatesReady} ready to download` },
+        ];
+        return (
+          <>
+            <WelcomeHeader />
+
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              {statTiles.map((s) => (
+                <Card key={s.label} interactive className="p-4">
+                  <p className="text-xs text-muted">{s.label}</p>
+                  <p className="mt-1 text-3xl font-bold tracking-tight">{s.value}</p>
+                  <p className={s.good ? "mt-1 text-xs text-success" : "mt-1 text-xs text-muted"}>{s.note}</p>
+                </Card>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+              <div className="space-y-6">
+                <UpcomingCard opportunities={opportunities} today={getToday()} />
+                <ContributionHistory records={history} />
+                <HoursChart data={monthly} />
+              </div>
+
+              <aside className="space-y-6">
+                <RecommendedCard opportunities={opportunities} />
+                <Card className="p-5">
+                  <CardTitle>Skills contributed</CardTitle>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {skills.length === 0 && <p className="text-xs text-muted">Skills you use on projects will show here.</p>}
+                    {skills.map((s) => (
+                      <SkillTag key={s} tone="brand">
+                        {s}
+                      </SkillTag>
+                    ))}
+                  </div>
+                </Card>
+                <CertificatesCard certificates={certificates} />
+              </aside>
+            </div>
+          </>
+        );
+      }}
+    </DataView>
+  );
+}

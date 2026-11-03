@@ -5,7 +5,7 @@ import { Badge, SkillTag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, Placeholder } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { formatShortDate, formatTimeRange } from "@/lib/format";
+import { formatDistance, formatShortDate, formatTimeRange } from "@/lib/format";
 import type { Opportunity } from "@/lib/types";
 import { PrimaryAction, StatusBadge } from "./OpportunityStatus";
 import { useVolunteer } from "./VolunteerProvider";
@@ -29,7 +29,7 @@ export function OpportunityCard({ opportunity: o }: { opportunity: Opportunity }
         </Link>
         <p className="mt-0.5 text-xs text-muted">{o.organisation}</p>
         <p className="mt-1 text-xs text-ink-soft">
-          {formatShortDate(o.start)} · {formatTimeRange(o.start, o.end)} · {o.area} · {o.distanceKm} km
+          {formatShortDate(o.start)} · {formatTimeRange(o.start, o.end)} · {[o.area, formatDistance(o.distanceKm)].filter(Boolean).join(" · ")}
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {o.skills.map((s) => (

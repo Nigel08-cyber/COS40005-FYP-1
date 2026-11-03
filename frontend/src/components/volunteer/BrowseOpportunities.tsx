@@ -26,6 +26,7 @@ const CATEGORIES: Category[] = [
   "Fundraising",
   "Disaster assistance",
   "Health",
+  "Community outreach",
 ];
 const SKILLS = ["Food handling", "Logistics", "First Aid", "Tutoring", "Event setup", "Community interaction"];
 const AVAILABILITY: Availability[] = ["Weekdays", "Weekends", "Evenings"];
@@ -85,7 +86,7 @@ export function BrowseOpportunities({ opportunities, today }: { opportunities: O
     const q = query.trim().toLowerCase();
     const list = opportunities.filter((o) => {
       if (tab === "recommended" && (o.matchPercent ?? 0) < RECOMMENDED_MIN_MATCH) return false;
-      if (tab === "near" && o.distanceKm > NEAR_ME_KM) return false;
+      if (tab === "near" && (o.distanceKm === null || o.distanceKm > NEAR_ME_KM)) return false;
       if (q && ![o.title, o.organisation, ...o.skills].some((t) => t.toLowerCase().includes(q))) return false;
       if (category !== "all" && o.category !== category) return false;
       if (location !== "all" && o.state !== location) return false;
@@ -95,14 +96,14 @@ export function BrowseOpportunities({ opportunities, today }: { opportunities: O
       if (filters.categories.length && !filters.categories.includes(o.category)) return false;
       if (filters.skills.length && !filters.skills.some((s) => o.skills.includes(s))) return false;
       if (!matchesAvailability(o, filters.availability)) return false;
-      if (o.distanceKm > filters.maxDistance) return false;
+      if (o.distanceKm !== null && o.distanceKm > filters.maxDistance) return false;
       if (filters.languages.length && !filters.languages.some((l) => o.languages.includes(l))) return false;
       return true;
     });
 
     const byMatch = (a: Opportunity, b: Opportunity) => (b.matchPercent ?? -1) - (a.matchPercent ?? -1);
     const bySoonest = (a: Opportunity, b: Opportunity) => a.start.localeCompare(b.start);
-    const byNearest = (a: Opportunity, b: Opportunity) => a.distanceKm - b.distanceKm;
+    const byNearest = (a: Opportunity, b: Opportunity) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity);
     return list.sort(sort === "soonest" ? bySoonest : sort === "nearest" ? byNearest : byMatch);
   }, [opportunities, today, tab, query, category, location, date, filters, sort]);
 

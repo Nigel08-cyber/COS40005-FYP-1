@@ -147,3 +147,18 @@ def test_ngo_dashboard(client, db_session):
     # an NGO with no projects returns zeros, not an error
     empty = client.get(f"/ngos/{make_active_ngo(db_session, 'R3', 'a3@example.com')[0]}/dashboard", headers=login(client, "a3@example.com")).json()
     assert empty["volunteers_total"] == 0 and empty["requirement_fill"] == [] and empty["skills_gap"] == []
+
+
+
+def test_project_requirement_fields_roundtrip(client, db_session):
+    """Minimum experience and preferred day/time are stored on the project and returned by the API."""
+    ngo_id, _ = make_active_ngo(db_session, "R1", "a1@example.com")
+    a1 = login(client, "a1@example.com")
+    body = {"ngo_id": ngo_id, "title": "Food drive", "min_experience_years": 2, "preferred_day": 6,
+            "preferred_start_time": "08:00:00", "preferred_end_time": "13:00:00"}
+    created = client.post("/projects", json=body, headers=a1).json()
+    assert (created["min_experience_years"], created["preferred_day"], created["preferred_start_time"]) == (2, 6, "08:00:00")
+    pid = created["project_id"]
+    r = client.patch(f"/projects/{pid}", json={"preferred_day": 7, "min_experience_years": 0}, headers=a1).json()
+    assert (r["preferred_day"], r["min_experience_years"], r["preferred_end_time"]) == (7, 0, "13:00:00")
+    assert client.post("/projects", json={**body, "preferred_day": 9}, headers=a1).status_code == 422

@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
-import { ProfileForm } from "@/components/volunteer/ProfileForm";
-import { getContributionHistory, getProfileOptions, getVolunteerProfile } from "@/lib/api/volunteer";
+import { ProfileView } from "@/components/volunteer/views/ProfileView";
 
 export const metadata: Metadata = { title: "Your volunteer profile · VolunteerHub" };
 
-export default async function ProfilePage() {
-  const [profile, options, history] = await Promise.all([
-    getVolunteerProfile(),
-    getProfileOptions(),
-    getContributionHistory(),
-  ]);
+// Content is loaded client-side behind VolunteerGate (the access token lives in memory), so there is nothing to validate for instant navigation.
+export const instant = false;
 
-  return <ProfileForm initialProfile={profile} options={options} history={history} />;
+export default function Page() {
+  return <ProfileView />;
 }
