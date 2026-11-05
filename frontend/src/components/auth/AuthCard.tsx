@@ -118,46 +118,60 @@ export function AuthCard() {
       />
 
       <form onSubmit={submit} noValidate className="mt-6">
-        <p className="mb-2 text-xs text-ink-soft">
-          {mode === "signup" ? "I am signing up as" : "I am logging in as"}
-        </p>
-        <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Account type">
-          {roles.map((r) => {
-            const active = role === r.value;
-            return (
-              <button
-                key={r.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setRole(r.value)}
-                className={cx(
-                  "relative rounded-lg border px-3 py-2.5 text-left",
-                  active ? "border-transparent" : "border-line hover:border-line-strong hover:bg-canvas",
-                )}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="role-highlight"
-                    className="absolute inset-0 rounded-lg border border-brand bg-brand-soft shadow-sm shadow-brand/10"
-                    transition={SLIDE_SPRING}
-                  />
-                )}
-                <span className="relative block">
-                  <span
-                    className={cx(
-                      "block text-sm font-semibold transition-colors duration-300",
-                      active ? "text-brand" : "text-ink",
-                    )}
-                  >
-                    {r.title}
-                  </span>
-                  <span className="block text-xs text-muted">{r.hint}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Only sign-up asks for the role: when logging in, the account's own role decides where the user lands. */}
+        <AnimatePresence initial={false}>
+          {mode === "signup" && (
+            <motion.div
+              key="role-picker"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+              <p className="mb-2 text-xs text-ink-soft">
+                I am signing up as
+              </p>
+              <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Account type">
+                {roles.map((r) => {
+                  const active = role === r.value;
+                  return (
+                    <button
+                      key={r.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setRole(r.value)}
+                      className={cx(
+                        "relative rounded-lg border px-3 py-2.5 text-left",
+                        active ? "border-transparent" : "border-line hover:border-line-strong hover:bg-canvas",
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="role-highlight"
+                          className="absolute inset-0 rounded-lg border border-brand bg-brand-soft shadow-sm shadow-brand/10"
+                          transition={SLIDE_SPRING}
+                        />
+                      )}
+                      <span className="relative block">
+                        <span
+                          className={cx(
+                            "block text-sm font-semibold transition-colors duration-300",
+                            active ? "text-brand" : "text-ink",
+                          )}
+                        >
+                          {r.title}
+                        </span>
+                        <span className="block text-xs text-muted">{r.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatedHeight>
           <AnimatePresence mode="wait" initial={false}>
