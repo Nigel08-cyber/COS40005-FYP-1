@@ -345,18 +345,23 @@ export interface AdminOrganisationsData {
   activeProjects: number;
 }
 
-export type AdminUserRole = "system_admin" | "ngo_admin" | "coordinator";
+/** Effective roles, in the backend's vocabulary (GET /users → roles[]) */
+export type AdminUserRole = "system_admin" | "ngo_admin" | "project_coordinator" | "volunteer";
+export type AccountStatus = "active" | "suspended" | "deactivated";
 
 export interface AdminUser {
-  /** user id + organisation, unique per row */
-  key: string;
   userId: number;
   name: string;
   email: string;
-  role: AdminUserRole;
-  /** Organisation name, "Platform" for the system admin */
-  organisation: string;
-  status: string;
+  /** Every role the account has, highest first */
+  roles: AdminUserRole[];
+  /** Names of the organisations the user belongs to (empty for volunteers) */
+  organisations: string[];
+  status: AccountStatus;
+  /** "YYYY-MM-DD" (Malaysia) the account was created */
+  joined: string;
+  /** The signed-in admin (cannot suspend themselves) */
+  isYou: boolean;
 }
 
 export interface AdminUsersData {

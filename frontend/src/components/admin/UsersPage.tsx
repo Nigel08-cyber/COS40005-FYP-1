@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Fields";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ConfirmButton } from "@/components/staff/ConfirmButton";
 import { useStaff } from "@/components/staff/StaffShell";
+import { setUserStatus } from "@/lib/api/admin";
+import { requestPasswordReset } from "@/lib/api/auth";
+import { errorMessage, shortDay } from "@/lib/api/http";
 import { cx } from "@/lib/format";
-import type { AdminUser, AdminUserRole, AdminUsersData } from "@/lib/staffTypes";
+import type { AccountStatus, AdminUser, AdminUserRole, AdminUsersData } from "@/lib/staffTypes";
 import { initialsOf } from "@/lib/useSessionGuard";
 
 const PAGE_SIZE = 10;
@@ -16,18 +20,24 @@ const PAGE_SIZE = 10;
 const ROLE: Record<AdminUserRole, { label: string; long: string; tone: Tone }> = {
   system_admin: { label: "System Admin", long: "System Administrator", tone: "brand" },
   ngo_admin: { label: "NGO Admin", long: "NGO Administrator", tone: "brand" },
-  coordinator: { label: "Coordinator", long: "Project Coordinator", tone: "neutral" },
+  project_coordinator: { label: "Coordinator", long: "Project Coordinator", tone: "neutral" },
+  volunteer: { label: "Volunteer", long: "Volunteer", tone: "neutral" },
 };
 
-const statusTone = (s: string): Tone => (s === "active" ? "success" : s === "suspended" ? "danger" : "warning");
+const STATUS: Record<AccountStatus, Tone> = { active: "success", suspended: "danger", deactivated: "warning" };
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const roleLabel = (u: AdminUser) => (u.roles[0] ? ROLE[u.roles[0]] : null);
 
 /** Downloads the rows as a CSV file (built in the browser). */
 function exportCsv(users: AdminUser[]) {
   const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const lines = [
-    ["Name", "Email", "Role", "Organisation", "Status"].join(","),
-    ...users.map((u) => [u.name, u.email, ROLE[u.role].long, u.organisation, u.status].map(cell).join(",")),
+    ["Name", "Email", "Roles", "Organisations", "Status", "Joined"].join(","),
+    ...users.map((u) =>
+      [u.name, u.email, u.roles.map((r) => ROLE[r].long).join("; "), u.organisations.join("; "), u.status, u.joined]
+        .map(cell)
+        .join(","),
+    ),
   ];
   const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
   const a = document.createElement("a");
@@ -38,40 +48,65 @@ function exportCsv(users: AdminUser[]) {
 }
 
 /**
- * Wireframe 16 · Admin: manage users. Lists the platform's staff accounts (the system admin and every
- * organisation's admins and coordinators). Volunteers, suspending, password resets and inviting users
- * need backend APIs that do not exist yet.
+ * Wireframe 16 · Admin: manage users. Every account from GET /users; suspend / reactivate with
+ * PATCH /users/{id}/status; "Send password reset" emails the user a reset link (POST /auth/password-reset).
+ * Invite user, change role and last login need backend APIs that do not exist yet.
  */
 export function UsersPage({ data }: { data: AdminUsersData }) {
   const { notify } = useStaff();
+  const [users, setUsers] = useState(data.users);
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
   const [organisation, setOrganisation] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
-  const [selectedKey, setSelectedKey] = useState(data.users[0]?.key ?? "");
+  const [selectedId, setSelectedId] = useState(data.users[0]?.userId ?? null);
+  const [busy, setBusy] = useState<"status" | "reset" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return data.users.filter(
+    return users.filter(
       (u) =>
         (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) &&
-        (!role || u.role === role) &&
-        (!organisation || u.organisation === organisation) &&
+        (!role || u.roles.includes(role as AdminUserRole)) &&
+        (!organisation || (organisation === "none" ? u.organisations.length === 0 : u.organisations.includes(organisation))) &&
         (!status || u.status === status),
     );
-  }, [data.users, query, role, organisation, status]);
+  }, [users, query, role, organisation, status]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const rows = filtered.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
-  const selected = data.users.find((u) => u.key === selectedKey) ?? null;
+  const selected = users.find((u) => u.userId === selectedId) ?? null;
   const filter = (set: (v: string) => void) => (v: string) => {
     set(v);
     setPage(0);
   };
-  const statuses = [...new Set(data.users.map((u) => u.status))];
   const later = (what: string) => () => notify(`${what} needs a backend API that is not available yet.`);
+
+  const changeStatus = async (u: AdminUser, next: "active" | "suspended") => {
+    setBusy("status");
+    setError(null);
+    try {
+      const updated = await setUserStatus(u.userId, next);
+      setUsers((list) => list.map((x) => (x.userId === u.userId ? updated : x)));
+      notify(next === "suspended" ? `${u.name} suspended and signed out everywhere.` : `${u.name} reactivated.`);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendReset = async (u: AdminUser) => {
+    setBusy("reset");
+    setError(null);
+    const result = await requestPasswordReset(u.email);
+    setBusy(null);
+    if (result.ok) notify(`Password reset link sent to ${u.email}.`);
+    else setError("message" in result ? result.message : "Something went wrong. Please try again.");
+  };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -89,10 +124,6 @@ export function UsersPage({ data }: { data: AdminUsersData }) {
           </div>
         }
       />
-      <p className="mb-4 rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-muted">
-        Showing staff accounts (system admin, NGO admins and coordinators). Volunteers will be listed once the backend
-        offers a &quot;list users&quot; API.
-      </p>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="min-w-0">
@@ -118,13 +149,20 @@ export function UsersPage({ data }: { data: AdminUsersData }) {
               label="Filter by organisation"
               value={organisation}
               onChange={filter(setOrganisation)}
-              options={[{ value: "", label: "Organisation: All" }, ...["Platform", ...data.organisations].map((o) => ({ value: o, label: o }))]}
+              options={[
+                { value: "", label: "Organisation: All" },
+                { value: "none", label: "No organisation" },
+                ...data.organisations.map((o) => ({ value: o, label: o })),
+              ]}
             />
             <Select
               label="Filter by status"
               value={status}
               onChange={filter(setStatus)}
-              options={[{ value: "", label: "Status: All" }, ...statuses.map((s) => ({ value: s, label: capitalise(s) }))]}
+              options={[
+                { value: "", label: "Status: All" },
+                ...(Object.keys(STATUS) as AccountStatus[]).map((s) => ({ value: s, label: capitalise(s) })),
+              ]}
             />
           </div>
 
@@ -140,29 +178,33 @@ export function UsersPage({ data }: { data: AdminUsersData }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {rows.map((u) => (
-                  <tr
-                    key={u.key}
-                    tabIndex={0}
-                    aria-selected={u.key === selectedKey}
-                    onClick={() => setSelectedKey(u.key)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setSelectedKey(u.key))}
-                    className={cx(
-                      "cursor-pointer outline-none transition-colors duration-200 hover:bg-brand-soft/40 focus-visible:bg-brand-soft/60",
-                      u.key === selectedKey && "bg-brand-soft/60",
-                    )}
-                  >
-                    <td className="px-4 py-2.5 font-medium text-ink">{u.name}</td>
-                    <td className="px-4 py-2.5 text-ink-soft">{u.email}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge tone={ROLE[u.role].tone}>{ROLE[u.role].label}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-ink-soft">{u.organisation}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge tone={statusTone(u.status)}>{capitalise(u.status)}</Badge>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((u) => {
+                  const r = roleLabel(u);
+                  return (
+                    <tr
+                      key={u.userId}
+                      tabIndex={0}
+                      aria-selected={u.userId === selectedId}
+                      onClick={() => setSelectedId(u.userId)}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setSelectedId(u.userId))}
+                      className={cx(
+                        "cursor-pointer outline-none transition-colors duration-200 hover:bg-brand-soft/40 focus-visible:bg-brand-soft/60",
+                        u.userId === selectedId && "bg-brand-soft/60",
+                      )}
+                    >
+                      <td className="px-4 py-2.5 font-medium text-ink">
+                        {u.name}
+                        {u.isYou && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-ink-soft">{u.email}</td>
+                      <td className="px-4 py-2.5">{r ? <Badge tone={r.tone}>{r.label}</Badge> : <span className="text-faint">—</span>}</td>
+                      <td className="px-4 py-2.5 text-ink-soft">{u.organisations.join(", ") || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge tone={STATUS[u.status] ?? "neutral"}>{capitalise(u.status)}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
@@ -214,18 +256,56 @@ export function UsersPage({ data }: { data: AdminUsersData }) {
                   </div>
                 </div>
                 <dl className="mt-4 space-y-3 text-sm">
-                  <Detail label="Role" value={ROLE[selected.role].long} />
-                  <Detail label="Organisation" value={selected.organisation} />
+                  <Detail label="Role" value={selected.roles.map((r) => ROLE[r].long).join(", ") || "No role yet"} />
+                  <Detail label="Organisation" value={selected.organisations.join(", ") || "—"} />
+                  <Detail label="Joined" value={selected.joined ? shortDay(selected.joined) + " " + selected.joined.slice(0, 4) : "—"} />
                   <Detail label="Last login" value="Not available yet" muted />
                   <Detail label="Status" value={capitalise(selected.status)} />
                 </dl>
+
+                {error && (
+                  <p role="alert" className="mt-4 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
+                    {error}
+                  </p>
+                )}
+
                 <div className="mt-5 space-y-2">
-                  {["Change role", "Send password reset", "Suspend user"].map((action) => (
-                    <Button key={action} variant="outline" className="w-full" onClick={later(action)}>
-                      {action}
+                  <Button variant="outline" className="w-full" onClick={later("Changing roles")}>
+                    Change role
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    loading={busy === "reset"}
+                    disabled={!!busy || selected.status !== "active"}
+                    title={selected.status !== "active" ? "Only active accounts can reset their password" : undefined}
+                    onClick={() => sendReset(selected)}
+                  >
+                    Send password reset
+                  </Button>
+                  {selected.isYou ? (
+                    <p className="pt-1 text-center text-[11px] text-faint">You cannot suspend your own account.</p>
+                  ) : selected.status === "suspended" ? (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      loading={busy === "status"}
+                      disabled={!!busy}
+                      onClick={() => changeStatus(selected, "active")}
+                    >
+                      Reactivate user
                     </Button>
-                  ))}
-                  <p className="pt-1 text-center text-[11px] text-faint">These actions need backend APIs (coming soon).</p>
+                  ) : (
+                    <div className="flex justify-center">
+                      <ConfirmButton
+                        label="Suspend user"
+                        question={`Suspend ${selected.name}?`}
+                        confirmLabel="Suspend"
+                        disabled={!!busy}
+                        onConfirm={() => changeStatus(selected, "suspended")}
+                      />
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

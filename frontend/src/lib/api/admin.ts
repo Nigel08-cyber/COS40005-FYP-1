@@ -2,13 +2,22 @@
   Data access for the System Administrator pages (wireframe 16 · Admin panel), connected to the backend.
   What the backend offers today: every organisation (GET /ngos as a platform admin), approve / suspend
   (PATCH /ngos/{id}/status), each organisation's members and dashboard, and all projects.
-  It has no API yet to list every user (volunteers included), suspend users, send password resets or read
-  the audit log — those parts of the pages say "Coming soon" (see BACKEND_INTEGRATION.md, section 4).
+  Users page: GET /users (every account with roles and organisations) and PATCH /users/{id}/status.
+  Still missing: invite user, change role, last login and the audit log — those say "Coming soon"
+  (see BACKEND_INTEGRATION.md, section 4).
 */
 import { restoreSession } from "@/lib/api/auth";
-import { api } from "@/lib/api/http";
+import { api, utcToLocal } from "@/lib/api/http";
 import type { MemberApi, NgoApi, ProjectApi } from "@/lib/api/projects";
-import type { AdminOrganisation, AdminOrganisationsData, AdminUser, AdminUsersData, NgoStatus } from "@/lib/staffTypes";
+import type {
+  AccountStatus,
+  AdminOrganisation,
+  AdminOrganisationsData,
+  AdminUser,
+  AdminUserRole,
+  AdminUsersData,
+  NgoStatus,
+} from "@/lib/staffTypes";
 
 interface NgoDashboardApi {
   volunteers_total: number;
@@ -65,28 +74,49 @@ export async function setOrganisationStatus(ngoId: number, status: NgoStatus) {
   return (await api<NgoApi>(`/ngos/${ngoId}/status`, { method: "PATCH", json: { status } })).status;
 }
 
-/**
- * Staff users: the signed-in system admin plus every organisation's admins and coordinators
- * (GET /ngos/{id}/members). Volunteers are not included: the backend has no "list users" API yet.
- */
+/* ---------------- users (GET /users, PATCH /users/{id}/status) ---------------- */
+
+interface AdminUserApi {
+  user_id: number;
+  full_name: string;
+  email: string;
+  account_status: AccountStatus;
+  system_role: string;
+  roles: AdminUserRole[];
+  organisations: { ngo_id: number; name: string; member_role: string }[];
+  created_at: string;
+}
+
+/** Highest role first, so the first one is the role the user logs in as. */
+const ROLE_ORDER: AdminUserRole[] = ["system_admin", "ngo_admin", "project_coordinator", "volunteer"];
+/** The backend returns at most this many users per call (its own maximum). */
+const USERS_LIMIT = 500;
+
+function toAdminUser(u: AdminUserApi, myId: number | undefined): AdminUser {
+  return {
+    userId: u.user_id,
+    name: u.full_name,
+    email: u.email,
+    roles: ROLE_ORDER.filter((r) => u.roles.includes(r)),
+    organisations: u.organisations.map((o) => o.name),
+    status: u.account_status,
+    joined: utcToLocal(u.created_at.slice(0, 19)).slice(0, 10),
+    isYou: u.user_id === myId,
+  };
+}
+
+/** GET /users (System Admin only): every account, sorted by name. Search and filters run in the browser. */
 export async function getAdminUsers(): Promise<AdminUsersData> {
-  const [me, ngos] = await Promise.all([restoreSession(), api<NgoApi[]>("/ngos")]);
-  const users: AdminUser[] = [];
-  if (me) {
-    users.push({
-      key: `${me.id}-platform`, userId: me.id, name: me.fullName, email: me.email,
-      role: "system_admin", organisation: "Platform", status: "active",
-    });
-  }
-  const lists = await Promise.all(ngos.map(async (n) => ({ ngo: n, members: await membersOf(n.ngo_id) })));
-  for (const { ngo, members } of lists) {
-    for (const m of members) {
-      users.push({
-        key: `${m.user_id}-${ngo.ngo_id}`, userId: m.user_id, name: m.full_name, email: m.email,
-        role: m.member_role, organisation: ngo.name, status: m.status,
-      });
-    }
-  }
-  users.sort((a, b) => a.name.localeCompare(b.name));
-  return { users, organisations: ngos.map((n) => n.name).sort() };
+  const [me, rows, ngos] = await Promise.all([
+    restoreSession(),
+    api<AdminUserApi[]>(`/users?limit=${USERS_LIMIT}`),
+    api<NgoApi[]>("/ngos"),
+  ]);
+  return { users: rows.map((u) => toAdminUser(u, me?.id)), organisations: ngos.map((n) => n.name).sort() };
+}
+
+/** PATCH /users/{id}/status — suspend (also signs them out everywhere) or reactivate. Not allowed on yourself. */
+export async function setUserStatus(userId: number, status: "active" | "suspended") {
+  const me = await restoreSession();
+  return toAdminUser(await api<AdminUserApi>(`/users/${userId}/status`, { method: "PATCH", json: { account_status: status } }), me?.id);
 }

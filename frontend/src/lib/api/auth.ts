@@ -147,6 +147,44 @@ export async function logOut() {
   }
 }
 
+/* ---------- password reset (sprint item 19) ---------- */
+
+/** Result of a password reset call: ok, the link is no longer valid, or a message to show. */
+export type ResetResult = { ok: true } | { ok: false; expired: true } | { ok: false; expired?: false; message: string };
+
+async function resetCall(path: string, body: unknown): Promise<ResetResult> {
+  try {
+    const res = await post(path, body);
+    if (res.ok) return { ok: true };
+    // 400 = the link is unknown, already used or expired (the backend does not say which)
+    if (res.status === 400) return { ok: false, expired: true };
+    const error = await toAuthError(res);
+    const message = error.message ?? Object.values(error.fields ?? {})[0] ?? "Please check the form and try again.";
+    return { ok: false, message };
+  } catch {
+    return { ok: false, message: UNREACHABLE };
+  }
+}
+
+/**
+ * POST /auth/password-reset. Always succeeds for a valid email (the backend gives the same answer whether or not
+ * the account exists); if it does, a single-use link to /reset-password?token=... is emailed.
+ * The backend sends at most one email per account per minute.
+ */
+export async function requestPasswordReset(email: string) {
+  return resetCall("/auth/password-reset", { email: email.trim() });
+}
+
+/** POST /auth/password-reset/check: is the emailed link still usable? (expired → show the expired screen) */
+export async function checkResetToken(token: string) {
+  return resetCall("/auth/password-reset/check", { token });
+}
+
+/** POST /auth/password-reset/confirm: sets the new password, uses up the link and signs the account out everywhere. */
+export async function confirmPasswordReset(token: string, newPassword: string) {
+  return resetCall("/auth/password-reset/confirm", { token, new_password: newPassword });
+}
+
 /**
  * The signed-in user, or null. Uses the in-memory session while the access token is fresh,
  * otherwise asks the backend for a new one with the refresh-token cookie.

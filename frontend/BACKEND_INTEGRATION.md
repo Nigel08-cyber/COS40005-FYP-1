@@ -13,7 +13,8 @@ still needs to add. Endpoints are listed in `backend/README.md`.
 | Project details, edit project / continue draft, publish / complete / cancel, assign coordinator | `src/lib/api/projects.ts`, `ngo.ts` | ✅ Connected |
 | Application review (approve / reject + search & filter), Team (add / remove coordinators) | `src/lib/api/projects.ts` | ✅ Connected — volunteers show as **"Volunteer #ID"** until the backend sends names (section 4) |
 | Coordinator My projects, project details, Applications | `src/lib/api/projects.ts` | ✅ Connected |
-| Admin panel: Organisations (list, approve / reject / suspend, stats), Users (staff accounts) | `src/lib/api/admin.ts` | ✅ Connected — Users lists staff only, user actions and audit log show **"Coming soon"** (section 4) |
+| Admin panel: Organisations (list, approve / reject / suspend, stats), Users (every account, suspend / reactivate, send password reset) | `src/lib/api/admin.ts` | ✅ Connected — invite user, change role, last login and audit log show **"Coming soon"** (section 4) |
+| Password reset (forgot password → email link → new password, expired-link screen) | `src/lib/api/auth.ts`, `components/auth/PasswordReset.tsx` | ✅ Connected — with `EMAIL_BACKEND=log` the link is printed in the backend terminal instead of emailed |
 | Coordinator attendance / QR check-in | `src/lib/api/coordinator.ts` | ❌ Sample data (`src/lib/fake/coordinatorFake.ts`); the page says "Preview with sample data" |
 
 Search the code for `NotSavedHint`, `ComingSoonCard`, `TODO(backend)` and `TODO(frontend)` to find every
@@ -56,6 +57,14 @@ while loading and an error with "Try again" if a call fails.
 | `logOut()` | `POST /auth/logout` |
 | `restoreSession()` | `POST /auth/refresh` when the access token is missing or about to expire |
 | `getAccessToken()` | used by `api()` in `http.ts` for every protected call |
+| `requestPasswordReset(email)` | `POST /auth/password-reset` ("Send reset link", "Resend email", admin "Send password reset") |
+| `checkResetToken(token)` | `POST /auth/password-reset/check` when `/reset-password?token=...` opens (400 → expired screen) |
+| `confirmPasswordReset(token, pw)` | `POST /auth/password-reset/confirm` ("Reset password"; 400 → expired screen) |
+
+- **Password reset links.** The backend emails `FRONTEND_URL/reset-password?token=...`. The page reads the token
+  once, removes it from the address bar, checks it, then shows the form or the expired screen. On Vercel the backend's
+  `FRONTEND_URL` must be the Vercel site address. Until Brevo (item 26) is connected, `EMAIL_BACKEND=log` prints the
+  link in the backend terminal.
 
 - **Proxy, not direct calls.** The browser calls `/auth/*` and `/api/*` on the frontend's own domain;
   `next.config.ts` forwards them to `BACKEND_URL`. The refresh-token cookie is therefore first-party
@@ -123,7 +132,7 @@ Behaviour worth knowing:
 | Page (route) | Backend calls |
 | --- | --- |
 | `/admin/organisations` | `GET /ngos` (every organisation for a platform admin), `GET /projects` (project counts, active projects), `GET /ngos/{id}/members` (NGO administrator), `GET /ngos/{id}/dashboard` (volunteers, hours this month); **Approve** → `PATCH /ngos/{id}/status` `active`, **Reject** / **Suspend** → `suspended`, **Reactivate** → `active` |
-| `/admin/users` | The signed-in admin + `GET /ngos/{id}/members` for every organisation (NGO admins and coordinators); search and filters run in the browser; **Export CSV** builds the file in the browser |
+| `/admin/users` | `GET /users?limit=500` (every account with `roles[]`, `organisations[]`, `account_status`, `created_at`); search and filters run in the browser; **Suspend user** / **Reactivate user** → `PATCH /users/{id}/status` (not offered on your own account); **Send password reset** → `POST /auth/password-reset` with that user's email; **Export CSV** builds the file in the browser |
 
 ## 4. What the backend still needs
 
@@ -169,22 +178,17 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
   Replace `components/coordinator/FakeQr.tsx` with a real QR library once tokens exist.
 
 **Admin panel (wireframe 16)**
-- `GET /users` (all users incl. volunteers, with role, organisation, `account_status`, last login) so the
-  Users page can list everyone; today it lists staff accounts only.
-- Suspend / reactivate a user (`users.account_status` exists but there is no endpoint), send a password
-  reset, invite a user, change a user's role from the panel.
+- Last login time in `GET /users` (the details panel shows "Not available yet").
+- Invite a user, and change a user's role from the panel (`PATCH /auth/users/{id}/system-role` only
+  promotes / demotes platform admins).
+- `GET /users` returns at most 500 accounts per call; add paging in the UI if the platform grows past that.
 - Audit log: the `audit_log` table is in `schema.sql` but nothing writes to it and there is no read API
   (needed for the Audit log card / page and "Export log").
 - Overview page: no wireframe yet (greyed out as "Soon").
 
 **Other**
-- Password reset (sprint item 19, wireframes PR1–PR5). The screens exist (`/forgot-password`,
-  `/reset-password`, `/reset-password/expired`, in `components/auth/PasswordReset.tsx`) but nothing is sent
-  or saved yet. Needed: a request endpoint (e.g. `POST /auth/password-reset { email }`, same answer whether or
-  not the email exists, rate limited), an email service that sends a one-time link
-  `/reset-password?token=...` that expires, and a confirm endpoint
-  (e.g. `POST /auth/password-reset/confirm { token, new_password }`) that also revokes refresh tokens.
-  See `TODO(backend)` in that file.
+- Real email sending for password reset (Brevo, item 26). Until then `EMAIL_BACKEND=log` prints the link in
+  the backend terminal.
 - Email verification.
 - Rate limiting on `/auth/login`.
 
@@ -195,8 +199,7 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
 - Nav links still without a page are greyed out as "Soon": AI recommendations, Reports, coordinator
   Dashboard and Feedback, admin Overview and Audit log. The certificate page (16a) and AI recommendation
   review (16b) are not started.
-- Password reset screens are built but only move to the next screen; a "Preview" box on the check-email
-  screen opens the next steps. Remove it once real reset emails are sent.
+- Admin "Change role" and "Invite user" only show a notice until the backend has those APIs.
 
 ## 6. Running and deploying
 

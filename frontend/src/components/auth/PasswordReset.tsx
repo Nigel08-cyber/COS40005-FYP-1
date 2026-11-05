@@ -1,26 +1,27 @@
 "use client";
 
 /*
-  Password reset flow (sprint item 19, wireframes PR1–PR5):
-  forgot password → check your email → set a new password → password updated, plus the expired-link page.
-
-  TODO(backend): the backend has no password reset API and no email service yet, so nothing is sent or saved:
-  - "Send reset link" / "Resend email" should call e.g. POST /auth/password-reset { email }
-  - /reset-password should check the token from the email link (?token=...) and show the expired page if invalid
-  - "Reset password" should call e.g. POST /auth/password-reset/confirm { token, new_password }
-  Until then the buttons only move to the next screen, and a "Preview" box on the check-email screen opens
-  the next steps (there is no email to click).
+  Password reset flow (sprint item 19, wireframes PR1–PR5), connected to the backend:
+  - "Send reset link" / "Resend email"  → POST /auth/password-reset { email }
+    (always the same answer, whether or not the account exists; at most one email per account per minute)
+  - /reset-password?token=...           → POST /auth/password-reset/check { token } (invalid → expired screen)
+  - "Reset password"                    → POST /auth/password-reset/confirm { token, new_password }
+  The emailed link is FRONTEND_URL/reset-password?token=... While the backend runs with EMAIL_BACKEND=log
+  (no email service yet), the link is printed in the backend's terminal instead of being emailed.
 */
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Fields";
+import { checkResetToken, confirmPasswordReset, requestPasswordReset } from "@/lib/api/auth";
 import { cx } from "@/lib/format";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Same as the backend's password_reset_cooldown_seconds */
 const RESEND_COOLDOWN_S = 60;
-// Same limits as sign-up (backend/app/schemas.py → RegisterIn)
+// Same limits as the backend (PasswordResetConfirmIn / RegisterIn)
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
@@ -40,6 +41,15 @@ function BackToLogin({ className }: { className?: string }) {
       </span>
       Back to log in
     </Link>
+  );
+}
+
+function FormError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+      {message}
+    </p>
   );
 }
 
@@ -68,16 +78,22 @@ function StatusIcon({ tone, children }: { tone: "brand" | "success" | "warning";
 export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string>();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  const send = (e: React.FormEvent) => {
+  const send = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!EMAIL_RE.test(email.trim())) {
       setError("Please enter a valid email address.");
       return;
     }
-    // TODO(backend): POST /auth/password-reset { email }
-    setSentTo(email.trim());
+    setSending(true);
+    const result = await requestPasswordReset(email);
+    setSending(false);
+    if (result.ok) setSentTo(email.trim());
+    else setFormError("message" in result ? result.message : "Something went wrong. Please try again.");
   };
 
   return (
@@ -104,7 +120,8 @@ export function ForgotPassword() {
                 setError(undefined);
               }}
             />
-            <Button type="submit" variant="primary" size="lg" className="w-full">
+            <FormError message={formError} />
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={sending}>
               Send reset link
             </Button>
           </form>
@@ -123,7 +140,8 @@ export function ForgotPassword() {
 
 function CheckEmail({ email }: { email: string }) {
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_S);
-  const [resent, setResent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -131,10 +149,16 @@ function CheckEmail({ email }: { email: string }) {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  const resend = () => {
-    // TODO(backend): POST /auth/password-reset { email } again
-    setResent(true);
-    setSecondsLeft(RESEND_COOLDOWN_S);
+  const resend = async () => {
+    setSending(true);
+    const result = await requestPasswordReset(email);
+    setSending(false);
+    if (result.ok) {
+      setNote("Email sent again.");
+      setSecondsLeft(RESEND_COOLDOWN_S);
+    } else {
+      setNote("message" in result ? result.message : "Something went wrong. Please try again.");
+    }
   };
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
@@ -146,33 +170,19 @@ function CheckEmail({ email }: { email: string }) {
         If an account exists for <span className="font-medium text-ink-soft">{email}</span>, a password reset link is on
         its way.
       </p>
-      <Button variant="outline" className="mt-6 w-full" disabled={secondsLeft > 0} onClick={resend}>
+      <Button variant="outline" className="mt-6 w-full" disabled={secondsLeft > 0} loading={sending} onClick={resend}>
         Resend email
       </Button>
       <p className="mt-3 text-xs text-muted" aria-live="polite">
-        {secondsLeft > 0 ? `You can request another email in ${clock}` : resent ? "Email sent again." : "You can request another email now."}
+        {secondsLeft > 0 ? `You can request another email in ${clock}` : (note ?? "You can request another email now.")}
       </p>
       <p className="mt-3 text-xs text-muted">Did not receive it? Check your spam folder.</p>
       <BackToLogin className="mt-4" />
-
-      {/* Not in the wireframe: there is no email to open until the backend sends one. */}
-      <div className="mt-6 rounded-lg border border-dashed border-line-strong px-3 py-2.5 text-left text-xs text-muted">
-        <span className="font-medium text-ink-soft">Preview</span> · the email service is not connected yet, so open the
-        next step here:
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-          <Link href="/reset-password" className="text-brand hover:underline">
-            Open the reset link →
-          </Link>
-          <Link href="/reset-password/expired" className="text-brand hover:underline">
-            See an expired link →
-          </Link>
-        </div>
-      </div>
     </div>
   );
 }
 
-/* ---------------- PR3 + PR4 · /reset-password ---------------- */
+/* ---------------- PR3 + PR4 (+ PR5 for a bad link) · /reset-password?token=... ---------------- */
 
 const RULES: { label: string; test: (p: string) => boolean }[] = [
   { label: `At least ${PASSWORD_MIN} characters`, test: (p) => p.length >= PASSWORD_MIN },
@@ -191,10 +201,72 @@ function strengthOf(score: number) {
   return { label: "Very strong", bar: "bg-success", text: "text-success" };
 }
 
+type LinkState = "checking" | "valid" | "invalid" | "unreachable";
+
+/** Reads ?token= from the emailed link (wrap in <Suspense>: it uses the URL). */
 export function ResetPassword() {
+  const params = useSearchParams();
+  // Read once: the token is removed from the address bar below and must survive that.
+  const [token] = useState(() => params.get("token") ?? "");
+  const [link, setLink] = useState<LinkState>(token ? "checking" : "invalid");
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    // Keep the secret token out of the address bar, history and referrers.
+    window.history.replaceState(null, "", "/reset-password");
+    let cancelled = false;
+    checkResetToken(token).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setLink("valid");
+      else if (result.expired) setLink("invalid");
+      else {
+        setCheckMessage(result.message);
+        setLink("unreachable");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, attempt]);
+
+  if (link === "checking") return <ResetLinkChecking />;
+  if (link === "invalid") return <ResetLinkExpired />;
+  if (link === "unreachable") {
+    return (
+      <div className={cx(card, "text-center")}>
+        <p className="text-sm text-ink-soft">{checkMessage}</p>
+        <Button
+          className="mt-4"
+          onClick={() => {
+            setLink("checking");
+            setAttempt((n) => n + 1);
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  return <NewPasswordForm token={token} onExpired={() => setLink("invalid")} />;
+}
+
+export function ResetLinkChecking() {
+  return (
+    <div className={cx(card, "flex flex-col items-center gap-3 py-12 text-sm text-muted")} aria-busy="true">
+      <span className="size-6 animate-spin rounded-full border-2 border-brand border-r-transparent" aria-hidden />
+      Checking your reset link…
+    </div>
+  );
+}
+
+function NewPasswordForm({ token, onExpired }: { token: string; onExpired: () => void }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const passed = RULES.map((r) => r.test(password));
@@ -214,12 +286,17 @@ export function ResetPassword() {
           : undefined;
   const confirmError = tried && !matches ? "The passwords do not match." : undefined;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTried(true);
+    setFormError(null);
     if (!longEnough || score < STRONG_ENOUGH || !matches) return;
-    // TODO(backend): POST /auth/password-reset/confirm { token, new_password }
-    setDone(true);
+    setSaving(true);
+    const result = await confirmPasswordReset(token, password);
+    setSaving(false);
+    if (result.ok) setDone(true);
+    else if (result.expired) onExpired();
+    else setFormError(result.message);
   };
 
   return (
@@ -288,7 +365,10 @@ export function ResetPassword() {
               {matches && !confirmError && <p className="pt-1 text-xs text-success">Passwords match</p>}
             </div>
 
-            <Button type="submit" variant="primary" size="lg" className="mt-6 w-full">
+            <div className="mt-4">
+              <FormError message={formError} />
+            </div>
+            <Button type="submit" variant="primary" size="lg" className="mt-4 w-full" loading={saving}>
               Reset password
             </Button>
           </form>
@@ -309,7 +389,7 @@ export function ResetPassword() {
   );
 }
 
-/* ---------------- PR5 · /reset-password/expired ---------------- */
+/* ---------------- PR5 · invalid / expired link (also /reset-password/expired) ---------------- */
 
 export function ResetLinkExpired() {
   return (
