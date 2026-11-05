@@ -29,6 +29,43 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PasswordResetRequestIn(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetTokenIn(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class PasswordResetConfirmIn(PasswordResetTokenIn):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class UserStatusIn(BaseModel):
+    account_status: Literal["active", "suspended"]
+
+
+class AdminUserOrgOut(BaseModel):
+    ngo_id: int
+    name: str
+    member_role: str  # ngo_admin | coordinator
+
+
+class AdminUserOut(BaseModel):
+    user_id: int
+    full_name: str
+    email: str
+    account_status: str
+    system_role: str
+    roles: list[str]  # system_admin, ngo_admin, project_coordinator, volunteer
+    organisations: list[AdminUserOrgOut]
+    created_at: datetime
+
+
+class MessageOut(BaseModel):
+    message: str
+
+
 class UserOut(BaseModel):
     user_id: int
     id: int  # same as user_id (the frontend's name for it)

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import Base, engine
 from app.models import RefreshToken
-from app.routers import applications, auth, ngos, opportunities, projects, volunteers
+from app.routers import applications, auth, ngos, opportunities, projects, users, volunteers
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ app.include_router(projects.router)
 app.include_router(applications.router)
 app.include_router(volunteers.router)
 app.include_router(opportunities.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

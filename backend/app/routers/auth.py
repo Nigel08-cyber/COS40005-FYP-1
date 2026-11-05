@@ -1,14 +1,18 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
 from app.deps import get_current_user, get_roles, require_roles
-from app.models import RefreshToken, User, VolunteerProfile, utcnow
-from app.schemas import LoginIn, RegisterIn, SystemRoleIn, TokenOut, UserOut
+from app import mailer
+from app.models import PasswordResetToken, RefreshToken, User, VolunteerProfile, utcnow
+from app.schemas import (
+    LoginIn, MessageOut, PasswordResetConfirmIn, PasswordResetRequestIn, PasswordResetTokenIn, RegisterIn,
+    SystemRoleIn, TokenOut, UserOut,
+)
 from app.security import (
     create_access_token, hash_password, hash_refresh_token, new_refresh_token, verify_password,
 )
@@ -102,6 +106,57 @@ def logout(response: Response, db: Session = Depends(get_db), refresh_token: str
             row.revoked_at = utcnow()
             db.commit()
     response.delete_cookie(COOKIE, path="/auth")
+
+
+def _usable_reset_token(db: Session, raw: str) -> PasswordResetToken | None:
+    """The reset token row for this emailed token, or None if it is unknown, used, expired or the account is not active."""
+    row = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == hash_refresh_token(raw)))
+    if row is None or row.used_at is not None or row.expires_at < utcnow():
+        return None
+    user = db.get(User, row.user_id)
+    return row if user is not None and user.account_status == "active" else None
+
+
+@router.post("/password-reset", response_model=MessageOut, status_code=202)
+def request_password_reset(body: PasswordResetRequestIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """Always answers the same way, so it cannot be used to find out which emails have an account. If the account
+    exists and is active, a single-use link is emailed (at most one per cooldown period)."""
+    s = get_settings()
+    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    if user is not None and user.account_status == "active":
+        now = utcnow()
+        latest = db.scalar(select(PasswordResetToken.created_at).where(PasswordResetToken.user_id == user.user_id)
+                           .order_by(PasswordResetToken.created_at.desc()).limit(1))
+        if latest is None or (now - latest).total_seconds() >= s.password_reset_cooldown_seconds:
+            for old in db.scalars(select(PasswordResetToken).where(PasswordResetToken.user_id == user.user_id, PasswordResetToken.used_at.is_(None))):
+                old.used_at = now  # only the newest link works
+            raw, digest = new_refresh_token()
+            db.add(PasswordResetToken(user_id=user.user_id, token_hash=digest, expires_at=now + timedelta(minutes=s.password_reset_minutes)))
+            db.commit()
+            background.add_task(mailer.send_password_reset, user.email, user.full_name, f"{s.frontend_url.rstrip('/')}/reset-password?token={raw}")
+    return MessageOut(message="If an account exists for that email, a password reset link has been sent.")
+
+
+@router.post("/password-reset/check", status_code=204)
+def check_password_reset(body: PasswordResetTokenIn, db: Session = Depends(get_db)):
+    """Lets the /reset-password page show the "expired link" screen before the user types a new password."""
+    if _usable_reset_token(db, body.token) is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid or has expired")
+
+
+@router.post("/password-reset/confirm", status_code=204)
+def confirm_password_reset(body: PasswordResetConfirmIn, db: Session = Depends(get_db)):
+    """Sets the new password, uses up the link and signs the account out everywhere (all refresh tokens revoked)."""
+    row = _usable_reset_token(db, body.token)
+    if row is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid or has expired")
+    now = utcnow()
+    db.get(User, row.user_id).password_hash = hash_password(body.new_password)
+    for t in db.scalars(select(PasswordResetToken).where(PasswordResetToken.user_id == row.user_id, PasswordResetToken.used_at.is_(None))):
+        t.used_at = now
+    for t in db.scalars(select(RefreshToken).where(RefreshToken.user_id == row.user_id, RefreshToken.revoked_at.is_(None))):
+        t.revoked_at = now
+    db.commit()
 
 
 @router.get("/me", response_model=UserOut)
