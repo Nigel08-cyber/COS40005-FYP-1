@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { OrgProfileForm } from "@/components/ngo/OrgProfileForm";
-import { getOrgProfile, getOrgProfileOptions } from "@/lib/api/ngo";
+import { OrgProfileView } from "@/components/ngo/views";
 
 export const metadata: Metadata = { title: "Organisation profile · VolunteerHub" };
 
-export default async function OrgProfilePage() {
-  const [profile, options] = await Promise.all([getOrgProfile(), getOrgProfileOptions()]);
-  return <OrgProfileForm initialProfile={profile} options={options} />;
+// Content is loaded client-side (the access token lives in memory), so there is nothing to validate for instant navigation.
+export const instant = false;
+
+export default function Page() {
+  return <OrgProfileView />;
 }

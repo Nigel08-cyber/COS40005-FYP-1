@@ -1,6 +1,6 @@
 /*
   Data shapes for the NGO Administrator and Project Coordinator pages
-  (wireframes 10, 12, 13 and 15a). These are the "contract" the backend should return.
+  (wireframes 10, 12, 13 and 15a). src/lib/api/ngo.ts maps the backend's responses to these.
 */
 
 export interface StaffUser {
@@ -11,23 +11,31 @@ export interface StaffUser {
   organisation: string;
 }
 
+export type NgoStatus = "pending" | "active" | "suspended";
+
 // ---------- 10 · Organisation profile ----------
 
 export interface OrgProfile {
   name: string;
+  /** Not stored by the backend yet */
   type: string;
   description: string;
+  /** Not stored by the backend yet (no upload endpoint) */
   logoName: string;
+  /** Required when the organisation is created; cannot be changed afterwards */
   registrationNo: string;
   areasOfActivity: string[];
   state: string;
   serviceAreas: string[];
+  /** Not stored by the backend yet */
   contactPerson: string;
   email: string;
   phone: string;
   website: string;
   officeAddress: string;
+  /** Not stored by the backend yet */
   standingSkills: string[];
+  /** Not stored by the backend yet */
   typicalVolunteers: string;
 }
 
@@ -38,15 +46,24 @@ export interface OrgProfileOptions {
   skills: string[];
 }
 
+/** The signed-in admin's organisation, or null when they have not created one yet. */
+export interface OrgProfileData {
+  ngoId: number | null;
+  status: NgoStatus | null;
+  profile: OrgProfile;
+}
+
 // ---------- 12 · Project creation ----------
 
 export interface Coordinator {
+  /** backend user_id */
   id: string;
   name: string;
 }
 
 export interface ProjectDraft {
   title: string;
+  /** Category label, e.g. "Food distribution" */
   category: string;
   coordinatorId: string;
   description: string;
@@ -55,18 +72,25 @@ export interface ProjectDraft {
   /** "HH:mm" */
   startTime: string;
   endTime: string;
+  /** Not stored by the backend yet */
   repeatWeekly: boolean;
   venue: string;
   area: string;
   volunteersRequired: string;
+  /** Label from EXPERIENCE_LEVELS */
   minExperience: string;
+  /** Not stored by the backend yet */
   language: string;
+  /** Skill names (from GET /skills) */
   skills: string[];
   preferredDay: string;
   preferredFrom: string;
   preferredTo: string;
+  /** Not stored by the backend yet */
   additionalRequirements: string;
+  /** Not stored by the backend yet */
   requireApproval: boolean;
+  /** Not stored by the backend yet */
   generateAiRecommendations: boolean;
 }
 
@@ -82,27 +106,37 @@ export interface ProjectFormOptions {
   times: string[];
 }
 
-export interface LikelyMatch {
-  label: string;
-  reason: string;
+export interface ProjectFormData {
+  ngoId: number | null;
+  status: NgoStatus | null;
+  draft: ProjectDraft;
+  options: ProjectFormOptions;
+  /** Set when editing a saved project (draft or published) instead of creating a new one */
+  existing: ExistingProject | null;
 }
 
-export interface LikelyMatches {
-  potentialCount: number;
-  top: LikelyMatch[];
+export interface ExistingProject {
+  projectId: string;
+  status: "draft" | "active" | "completed" | "cancelled";
+  /** The session that is updated when the date / time / venue change (null = none yet) */
+  eventId: number | null;
+  /** Coordinator saved on the project, to know whether it changed */
+  coordinatorId: string;
 }
 
 // ---------- Projects list (/ngo/projects) ----------
+
+export type ProjectState = "active" | "completed" | "cancelled";
 
 export interface ProjectListItem {
   id: string;
   title: string;
   coordinator: string;
-  /** "YYYY-MM-DD" */
+  /** "YYYY-MM-DD" of the next session (or the project start); empty when not set */
   date: string;
   registered: number;
-  needed: number;
-  completed: boolean;
+  needed: number | null;
+  state: ProjectState;
 }
 
 export interface ProjectDraftItem {
@@ -111,25 +145,34 @@ export interface ProjectDraftItem {
   category: string;
   /** "YYYY-MM-DD", empty when not chosen yet */
   date: string;
-  /** "YYYY-MM-DD" */
-  lastEdited: string;
+  /** "YYYY-MM-DD" the draft was created */
+  created: string;
   /** Required fields that are still empty */
   missing: string[];
+}
+
+export interface ProjectsData {
+  ngoId: number | null;
+  status: NgoStatus | null;
+  organisation: string;
+  projects: ProjectListItem[];
+  drafts: ProjectDraftItem[];
 }
 
 // ---------- 13 · NGO dashboard ----------
 
 export interface StatTile {
   label: string;
-  value: string;
+  /** null = the backend does not provide this number yet */
+  value: string | null;
   note: string;
   noteTone?: "success" | "warning" | "muted";
 }
 
 export interface ProjectRequirement {
   project: string;
-  registered: number;
-  needed: number;
+  approved: number;
+  needed: number | null;
 }
 
 export interface SkillGap {
@@ -147,35 +190,16 @@ export interface SkillShare {
   percent: number;
 }
 
-export interface AiInsight {
-  tag: string;
-  text: string;
-}
-
-export interface UpcomingProject {
-  id: string;
-  project: string;
-  coordinator: string;
-  /** "YYYY-MM-DD" */
-  date: string;
-  registered: number;
-  needed: number;
-}
-
 export interface NgoDashboardData {
+  ngoId: number | null;
+  status: NgoStatus | null;
   organisation: string;
-  period: string;
   volunteerStats: StatTile[];
   projectStats: StatTile[];
   applicationsToReview: number;
-  aiRecommendationSetsReady: number;
   requirements: ProjectRequirement[];
   skillsGap: SkillGap[];
-  participationTrend: ChartPoint[];
-  peakParticipation: ChartPoint[];
-  requestedSkills: SkillShare[];
-  insights: AiInsight[];
-  upcomingProjects: UpcomingProject[];
+  upcomingProjects: ProjectListItem[];
 }
 
 // ---------- 15a · Attendance (Project Coordinator) ----------
@@ -202,4 +226,104 @@ export interface AttendanceEvent {
   expectedVolunteers: number;
   /** How long one QR token is valid before it rotates */
   qrRefreshSeconds: number;
+}
+
+// ---------- Project details, applications and team (NGO Administrator + Project Coordinator) ----------
+
+export type ProjectStatus = "draft" | ProjectState;
+export type ApplicationStatus = "pending" | "approved" | "rejected" | "withdrawn";
+
+export interface ApplicationItem {
+  id: number;
+  projectId: string;
+  projectTitle: string;
+  volunteerId: number;
+  /** Volunteer's name, or "Volunteer #12" while the backend does not send names */
+  volunteer: string;
+  /** False while the backend only sends the volunteer's user id */
+  hasName: boolean;
+  email: string | null;
+  /** null = not provided by the backend */
+  skills: string[] | null;
+  /** "YYYY-MM-DD" (Malaysia), null when not provided */
+  appliedOn: string | null;
+  status: ApplicationStatus;
+  decidedBy: string | null;
+  /** "YYYY-MM-DD" (Malaysia) */
+  decidedOn: string | null;
+  note: string | null;
+}
+
+export interface SessionItem {
+  id: number;
+  title: string;
+  /** Malaysia local time, "YYYY-MM-DDTHH:mm" */
+  start: string;
+  end: string;
+  venue: string;
+  capacity: number | null;
+  registered: number;
+  waitlisted: number;
+  status: string;
+}
+
+export interface ProjectDetail {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: ProjectStatus;
+  location: string;
+  /** "YYYY-MM-DD", empty when not set */
+  date: string;
+  coordinatorId: string;
+  coordinator: string;
+  volunteersNeeded: number | null;
+  minExperience: string;
+  preferredAvailability: string;
+  skills: string[];
+  /** "YYYY-MM-DD" */
+  created: string;
+}
+
+/** Who is looking at the project decides which actions are offered. */
+export type StaffScope = "ngo" | "coordinator";
+
+export interface ProjectDetailData {
+  scope: StaffScope;
+  ngoStatus: NgoStatus | null;
+  /** null = not found, or not a project of the user's organisation */
+  project: ProjectDetail | null;
+  sessions: SessionItem[];
+  applications: ApplicationItem[];
+  coordinators: Coordinator[];
+  /** Only NGO admins may link a different coordinator (PUT /projects/{id}/coordinator) */
+  canAssignCoordinator: boolean;
+}
+
+export interface ApplicationsData {
+  scope: StaffScope;
+  /** Projects the list can be filtered by */
+  projects: { id: string; title: string }[];
+  applications: ApplicationItem[];
+  /** null = the user has no organisation (NGO) */
+  ngoId: number | null;
+}
+
+export interface MemberItem {
+  userId: number;
+  name: string;
+  email: string;
+  role: "ngo_admin" | "coordinator";
+  isYou: boolean;
+}
+
+export interface TeamData {
+  ngoId: number | null;
+  organisation: string;
+  members: MemberItem[];
+}
+
+export interface CoordinatorProjectsData {
+  projects: ProjectListItem[];
 }

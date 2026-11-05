@@ -173,7 +173,7 @@ export function homeFor(role: AccountRole) {
     case "volunteer":
       return "/dashboard";
     case "project_coordinator":
-      return "/coordinator/attendance";
+      return "/coordinator/projects";
     default:
       // ngo_admin, and system_admin (allowed everywhere by the backend; no admin pages yet)
       return "/ngo/dashboard";

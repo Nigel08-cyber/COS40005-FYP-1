@@ -1,14 +1,6 @@
 // FAKE DATA — remove when the backend is connected (see ./README.md)
 // Project Coordinator pages: attendance / QR check-in (15a).
-import type { AttendanceEvent, AttendanceRecord, StaffUser } from "@/lib/staffTypes";
-
-export const coordinatorFake: StaffUser = {
-  fullName: "Daniel Lim",
-  initials: "DL",
-  email: "daniel.fake@example.com",
-  roleLabel: "Project Coordinator",
-  organisation: "Harapan Community Kitchen",
-};
+import type { AttendanceEvent, AttendanceRecord } from "@/lib/staffTypes";
 
 export const attendanceEventFake: AttendanceEvent = {
   id: "event-fake-1",

@@ -55,6 +55,7 @@ export function TextField({
   value,
   onChange,
   error,
+  labelExtra,
   ...input
 }: {
   id: string;
@@ -64,6 +65,8 @@ export function TextField({
   onChange: (value: string) => void;
   /** Shown under the field in red; also marks the input invalid */
   error?: string;
+  /** Rendered after the label, e.g. a "Not saved yet" tag */
+  labelExtra?: React.ReactNode;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   const errorId = `${id}-error`;
   return (
@@ -71,6 +74,7 @@ export function TextField({
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-ink">
         {label}
         {required && " *"}
+        {labelExtra}
       </label>
       <input
         id={id}
@@ -111,17 +115,21 @@ export function TextArea({
   label,
   value,
   onChange,
+  labelExtra,
   ...rest
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** Rendered after the label, e.g. a "Not saved yet" tag */
+  labelExtra?: React.ReactNode;
 } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange">) {
   return (
     <div>
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-ink">
         {label}
+        {labelExtra}
       </label>
       <textarea
         id={id}

@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/ui/Logo";
 import { SLIDE_SPRING } from "@/components/ui/MotionProvider";
+import { PageSkeleton } from "@/components/volunteer/DataView";
 import { type AccountRole, logOut } from "@/lib/api/auth";
+import { getMyOrganisationName } from "@/lib/api/ngo";
 import { cx } from "@/lib/format";
 import type { StaffUser } from "@/lib/staffTypes";
 import { initialsOf, ROLE_LABELS, useSessionGuard } from "@/lib/useSessionGuard";
@@ -39,10 +41,10 @@ function isActive(pathname: string, link: StaffLink) {
 
 /**
  * Page frame for NGO Administrator and Project Coordinator screens:
- * top nav, left sidebar, user menu with Log out, toasts and the (FAKE) login check.
+ * top nav, left sidebar, user menu with Log out, toasts and the login + role check.
+ * The page content only renders once the session is confirmed (its data calls need the access token).
  */
 export function StaffShell({
-  user: fakeUser,
   allowedRoles,
   homeHref,
   topLinks,
@@ -50,7 +52,6 @@ export function StaffShell({
   sideLinks,
   children,
 }: {
-  user: StaffUser;
   /** Roles that may open these pages; anyone else is sent to their own home page. */
   allowedRoles: AccountRole[];
   homeHref: string;
@@ -61,20 +62,26 @@ export function StaffShell({
 }) {
   const pathname = usePathname();
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+  const [organisation, setOrganisation] = useState("");
   const nextId = useRef(0);
 
-  // Real login + role check against the backend
+  // Login + role check against the backend
   const sessionUser = useSessionGuard(allowedRoles);
-  // Name, email and role come from the real account; the organisation is still FAKE data
-  const user: StaffUser = sessionUser
-    ? {
-        ...fakeUser,
-        fullName: sessionUser.fullName,
-        initials: initialsOf(sessionUser.fullName),
-        email: sessionUser.email,
-        roleLabel: ROLE_LABELS[sessionUser.role],
-      }
-    : { ...fakeUser, fullName: "", initials: "", email: "", roleLabel: "" };
+
+  useEffect(() => {
+    if (!sessionUser) return;
+    getMyOrganisationName()
+      .then(setOrganisation)
+      .catch(() => setOrganisation(""));
+  }, [sessionUser]);
+
+  const user: StaffUser = {
+    fullName: sessionUser?.fullName ?? "",
+    initials: sessionUser ? initialsOf(sessionUser.fullName) : "",
+    email: sessionUser?.email ?? "",
+    roleLabel: sessionUser ? ROLE_LABELS[sessionUser.role] : "",
+    organisation,
+  };
 
   const notify = useCallback((message: string) => {
     const id = nextId.current++;
@@ -107,7 +114,7 @@ export function StaffShell({
             ))}
           </ul>
         </aside>
-        <main className="min-w-0 flex-1 px-4 py-8 sm:px-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-8">{sessionUser ? children : <PageSkeleton />}</main>
       </div>
 
       <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2" aria-live="polite">

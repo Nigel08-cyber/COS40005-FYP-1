@@ -1,34 +1,27 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { Badge, type Tone } from "@/components/ui/Badge";
-import { useStaff } from "@/components/staff/StaffShell";
 import { formatShortDate } from "@/lib/format";
-import type { ProjectDraftItem } from "@/lib/staffTypes";
+import type { ProjectDraftItem, ProjectListItem } from "@/lib/staffTypes";
 
 /** A project counts as "Open" while at least this share of spots is filled; below it "Needs volunteers". */
 export const OPEN_FILL_RATIO = 0.6;
 
-export interface ProjectRow {
-  id: string;
-  title: string;
-  coordinator: string;
-  /** "YYYY-MM-DD" */
-  date: string;
-  registered: number;
-  needed: number;
-  completed?: boolean;
-}
-
-function projectStatus(p: ProjectRow): { tone: Tone; label: string } {
-  if (p.completed) return { tone: "neutral", label: "Completed" };
+function projectStatus(p: ProjectListItem): { tone: Tone; label: string } {
+  if (p.state === "completed") return { tone: "neutral", label: "Completed" };
+  if (p.state === "cancelled") return { tone: "danger", label: "Cancelled" };
+  if (!p.needed) return { tone: "success", label: "Open" };
   return p.registered / p.needed >= OPEN_FILL_RATIO
     ? { tone: "success", label: "Open" }
     : { tone: "warning", label: "Needs volunteers" };
 }
 
-/** "2026-10-17" -> "17 Oct" */
-const dayMonth = (date: string) => formatShortDate(date).split(", ")[1];
+/** "2026-10-17" -> "17 Oct" ("Not set" when empty) */
+function DateCell({ date }: { date: string }) {
+  return date ? <>{formatShortDate(date).split(", ")[1]}</> : <span className="text-faint">Not set</span>;
+}
 
 /** Props that make a table row behave like a button: hover, press animation, keyboard support. */
 function clickableRow(onOpen: () => void, label: string) {
@@ -73,11 +66,19 @@ function Head({ columns }: { columns: string[] }) {
   );
 }
 
-/** Project table (same look as "Upcoming projects"). Clicking a row will open the project details page. */
-export function ProjectTable({ rows, empty = "No projects yet." }: { rows: ProjectRow[]; empty?: string }) {
-  const { notify } = useStaff();
-  // TODO(frontend): open /ngo/projects/[id] once the project details page is designed
-  const open = (p: ProjectRow) => notify(`Details for “${p.title}” will open here in a later sprint.`);
+/** Project table (same look as "Upcoming projects"). Clicking a row opens the project details page. */
+export function ProjectTable({
+  rows,
+  empty = "No projects yet.",
+  basePath = "/ngo/projects",
+}: {
+  rows: ProjectListItem[];
+  empty?: string;
+  /** Details page prefix: /ngo/projects (NGO admin) or /coordinator/projects (coordinator) */
+  basePath?: string;
+}) {
+  const router = useRouter();
+  const open = (p: ProjectListItem) => router.push(`${basePath}/${p.id}`);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
@@ -98,9 +99,11 @@ export function ProjectTable({ rows, empty = "No projects yet." }: { rows: Proje
                 >
                   <td className="px-4 py-2.5 font-medium text-ink group-hover:text-brand">{p.title}</td>
                   <td className="px-4 py-2.5 text-ink-soft">{p.coordinator}</td>
-                  <td className="px-4 py-2.5 text-ink-soft">{dayMonth(p.date)}</td>
                   <td className="px-4 py-2.5 text-ink-soft">
-                    {p.registered} / {p.needed}
+                    <DateCell date={p.date} />
+                  </td>
+                  <td className="px-4 py-2.5 text-ink-soft">
+                    {p.registered} / {p.needed ?? "–"}
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge tone={status.tone}>{status.label}</Badge>
@@ -123,29 +126,36 @@ export function ProjectTable({ rows, empty = "No projects yet." }: { rows: Proje
   );
 }
 
-/** Drafts that are not published yet. Clicking a row will reopen it in the create form. */
+/** Drafts that are not published yet. Clicking a row reopens the draft in the project form. */
 export function DraftTable({ drafts }: { drafts: ProjectDraftItem[] }) {
-  const { notify } = useStaff();
-  // TODO(frontend): open /ngo/projects/new with this draft loaded once drafts can be fetched
-  const open = (d: ProjectDraftItem) => notify(`Editing the draft “${d.title}” will be available in a later sprint.`);
+  const router = useRouter();
+  const open = (d: ProjectDraftItem) => router.push(`/ngo/projects/${d.id}/edit`);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
       <table className="w-full text-left text-sm">
-        <Head columns={["Draft", "Category", "Date", "Last edited", "Still needed"]} />
+        <Head columns={["Draft", "Category", "Date", "Created", "Still needed"]} />
         <tbody className="divide-y divide-line">
           {drafts.map((d) => (
             <motion.tr key={d.id} {...clickableRow(() => open(d), `Continue draft ${d.title}`)}>
               <td className="px-4 py-2.5 font-medium text-ink group-hover:text-brand">{d.title}</td>
               <td className="px-4 py-2.5 text-ink-soft">{d.category}</td>
-              <td className="px-4 py-2.5 text-ink-soft">{d.date ? dayMonth(d.date) : <span className="text-faint">Not set</span>}</td>
-              <td className="px-4 py-2.5 text-ink-soft">{dayMonth(d.lastEdited)}</td>
+              <td className="px-4 py-2.5 text-ink-soft">
+                <DateCell date={d.date} />
+              </td>
+              <td className="px-4 py-2.5 text-ink-soft">
+                <DateCell date={d.created} />
+              </td>
               <td className="px-4 py-2.5">
-                <span title={d.missing.join(", ")}>
-                  <Badge tone="warning">
-                    {d.missing.length} {d.missing.length === 1 ? "field" : "fields"} missing
-                  </Badge>
-                </span>
+                {d.missing.length === 0 ? (
+                  <Badge tone="success">Ready to publish</Badge>
+                ) : (
+                  <span title={d.missing.join(", ")}>
+                    <Badge tone="warning">
+                      {d.missing.length} {d.missing.length === 1 ? "field" : "fields"} missing
+                    </Badge>
+                  </span>
+                )}
               </td>
               <Chevron />
             </motion.tr>

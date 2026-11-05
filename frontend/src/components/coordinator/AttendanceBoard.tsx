@@ -151,6 +151,10 @@ export function AttendanceBoard({ event, initialRoster }: { event: AttendanceEve
           </div>
         }
       />
+      <div role="note" className="mb-6 rounded-xl border border-line bg-canvas px-4 py-3 text-sm text-ink-soft">
+        <span className="font-medium text-ink">Preview with sample data.</span> Attendance and QR check-in are not
+        connected to the backend yet, so the event, volunteers and check-ins below are examples and nothing is saved.
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <Card className="p-5">

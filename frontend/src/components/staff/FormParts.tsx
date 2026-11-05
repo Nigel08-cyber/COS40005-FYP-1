@@ -10,15 +10,21 @@ import { cx } from "@/lib/format";
 export function FormSection({
   title,
   hint,
+  badge,
   children,
 }: {
   title: string;
   hint?: string;
+  /** Rendered after the title, e.g. a "Not saved yet" tag for a whole section */
+  badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <Card className="p-5">
-      <CardTitle>{title}</CardTitle>
+      <CardTitle>
+        {title}
+        {badge}
+      </CardTitle>
       {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
       <div className="mt-4">{children}</div>
     </Card>
@@ -32,6 +38,7 @@ export function LabeledSelect({
   options,
   placeholder,
   required,
+  labelExtra,
   format = (v) => v,
 }: {
   label: string;
@@ -40,6 +47,8 @@ export function LabeledSelect({
   options: string[] | { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
+  /** Rendered after the label, e.g. a "Not saved yet" tag */
+  labelExtra?: React.ReactNode;
   format?: (value: string) => string;
 }) {
   const normalised = options.map((o) => (typeof o === "string" ? { value: o, label: format(o) } : o));
@@ -48,6 +57,7 @@ export function LabeledSelect({
       <p className="mb-1.5 text-xs font-medium">
         {label}
         {required && " *"}
+        {labelExtra}
       </p>
       <Select
         label={label}
@@ -169,17 +179,23 @@ export function FileField({
   placeholder,
   fileName,
   onChange,
+  labelExtra,
   accept = "image/png,image/jpeg",
 }: {
   label: string;
   placeholder: string;
   fileName: string;
   onChange: (name: string) => void;
+  /** Rendered after the label, e.g. a "Not saved yet" tag */
+  labelExtra?: React.ReactNode;
   accept?: string;
 }) {
   return (
     <label className="block">
-      <FieldLabel>{label}</FieldLabel>
+      <FieldLabel>
+        {label}
+        {labelExtra}
+      </FieldLabel>
       <input
         type="file"
         accept={accept}

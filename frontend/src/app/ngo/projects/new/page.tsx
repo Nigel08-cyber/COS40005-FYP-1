@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
-import { ProjectForm } from "@/components/ngo/ProjectForm";
-import { getLikelyMatches, getNewProjectDraft, getProjectFormOptions } from "@/lib/api/ngo";
+import { NewProjectView } from "@/components/ngo/views";
 
 export const metadata: Metadata = { title: "Create a project · VolunteerHub" };
 
-export default async function NewProjectPage() {
-  const [draft, options, matches] = await Promise.all([
-    getNewProjectDraft(),
-    getProjectFormOptions(),
-    getLikelyMatches(),
-  ]);
-  return <ProjectForm initialDraft={draft} options={options} matches={matches} />;
+// Content is loaded client-side (the access token lives in memory), so there is nothing to validate for instant navigation.
+export const instant = false;
+
+export default function Page() {
+  return <NewProjectView />;
 }

@@ -1,18 +1,9 @@
 /*
   Data access for the Project Coordinator pages (wireframe 15a).
-  Right now these return FAKE data from src/lib/fake/coordinatorFake.ts;
-  when the backend is ready, replace each body with a real request.
+  The backend has no attendance / QR check-in endpoints yet, so these still return FAKE data from
+  src/lib/fake/coordinatorFake.ts; replace each body with a real request once they exist.
 */
-import {
-  attendanceEventFake,
-  attendanceRosterFake,
-  coordinatorFake,
-  nextQrTokenFake,
-} from "@/lib/fake/coordinatorFake";
-
-export async function getCurrentCoordinator() {
-  return coordinatorFake;
-}
+import { attendanceEventFake, attendanceRosterFake, nextQrTokenFake } from "@/lib/fake/coordinatorFake";
 
 /** The event the coordinator is running attendance for. */
 export async function getAttendanceEvent() {
