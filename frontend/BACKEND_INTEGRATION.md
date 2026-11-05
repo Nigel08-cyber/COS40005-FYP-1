@@ -13,6 +13,7 @@ still needs to add. Endpoints are listed in `backend/README.md`.
 | Project details, edit project / continue draft, publish / complete / cancel, assign coordinator | `src/lib/api/projects.ts`, `ngo.ts` | ✅ Connected |
 | Application review (approve / reject + search & filter), Team (add / remove coordinators) | `src/lib/api/projects.ts` | ✅ Connected — volunteers show as **"Volunteer #ID"** until the backend sends names (section 4) |
 | Coordinator My projects, project details, Applications | `src/lib/api/projects.ts` | ✅ Connected |
+| Admin panel: Organisations (list, approve / reject / suspend, stats), Users (staff accounts) | `src/lib/api/admin.ts` | ✅ Connected — Users lists staff only, user actions and audit log show **"Coming soon"** (section 4) |
 | Coordinator attendance / QR check-in | `src/lib/api/coordinator.ts` | ❌ Sample data (`src/lib/fake/coordinatorFake.ts`); the page says "Preview with sample data" |
 
 Search the code for `NotSavedHint`, `ComingSoonCard`, `TODO(backend)` and `TODO(frontend)` to find every
@@ -33,6 +34,7 @@ src/
 │  │  ├─ volunteer.ts    ← volunteer pages
 │  │  ├─ ngo.ts          ← NGO Administrator pages: profile, projects list, create / edit, dashboard (section 3)
 │  │  ├─ projects.ts     ← shared by NGO admins and coordinators: project details, applications, team (section 3)
+│  │  ├─ admin.ts        ← System Administrator pages (admin panel, section 3)
 │  │  └─ coordinator.ts  ← Project Coordinator attendance (still sample data)
 │  └─ fake/              ← sample data still in use: coordinatorFake.ts only
 ├─ app/                  ← pages (routes): volunteer pages, /ngo/..., /coordinator/...
@@ -63,7 +65,8 @@ while loading and an error with "Try again" if a call fails.
 - **Roles.** The login response's `role` (the account's highest role) decides the landing page
   (`homeFor` in `auth.ts`) and which page groups the user may open (`useSessionGuard`): volunteer pages →
   `volunteer`; `/ngo` → `ngo_admin`, `system_admin`; `/coordinator` → `project_coordinator`, `ngo_admin`,
-  `system_admin`. The backend still checks roles on every API call. A coordinator lands on `/coordinator/projects`.
+  `system_admin`; `/admin` → `system_admin` only. The backend still checks roles on every API call. A coordinator
+  lands on `/coordinator/projects`, a system admin on `/admin/organisations`.
 
 ## 2. Volunteer pages (`src/lib/api/volunteer.ts`)
 
@@ -115,6 +118,13 @@ Behaviour worth knowing:
 - A project is **"Open"** while at least 60% of spots are filled, otherwise **"Needs volunteers"**
   (`OPEN_FILL_RATIO` in `components/ngo/ProjectTables.tsx`).
 
+**System Administrator pages — wireframe 16 · Admin panel** (`src/lib/api/admin.ts`):
+
+| Page (route) | Backend calls |
+| --- | --- |
+| `/admin/organisations` | `GET /ngos` (every organisation for a platform admin), `GET /projects` (project counts, active projects), `GET /ngos/{id}/members` (NGO administrator), `GET /ngos/{id}/dashboard` (volunteers, hours this month); **Approve** → `PATCH /ngos/{id}/status` `active`, **Reject** / **Suspend** → `suspended`, **Reactivate** → `active` |
+| `/admin/users` | The signed-in admin + `GET /ngos/{id}/members` for every organisation (NGO admins and coordinators); search and filters run in the browser; **Export CSV** builds the file in the browser |
+
 ## 4. What the backend still needs
 
 Fields and blocks below are visible on the pages but marked **"Not saved yet"** or **"Coming soon"**.
@@ -158,8 +168,24 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
   check-in, close event (`TODO(backend)` in `components/coordinator/AttendanceBoard.tsx`).
   Replace `components/coordinator/FakeQr.tsx` with a real QR library once tokens exist.
 
+**Admin panel (wireframe 16)**
+- `GET /users` (all users incl. volunteers, with role, organisation, `account_status`, last login) so the
+  Users page can list everyone; today it lists staff accounts only.
+- Suspend / reactivate a user (`users.account_status` exists but there is no endpoint), send a password
+  reset, invite a user, change a user's role from the panel.
+- Audit log: the `audit_log` table is in `schema.sql` but nothing writes to it and there is no read API
+  (needed for the Audit log card / page and "Export log").
+- Overview page: no wireframe yet (greyed out as "Soon").
+
 **Other**
-- Password reset / email verification ("Forgot password?" shows a notice).
+- Password reset (sprint item 19, wireframes PR1–PR5). The screens exist (`/forgot-password`,
+  `/reset-password`, `/reset-password/expired`, in `components/auth/PasswordReset.tsx`) but nothing is sent
+  or saved yet. Needed: a request endpoint (e.g. `POST /auth/password-reset { email }`, same answer whether or
+  not the email exists, rate limited), an email service that sends a one-time link
+  `/reset-password?token=...` that expires, and a confirm endpoint
+  (e.g. `POST /auth/password-reset/confirm { token, new_password }`) that also revokes refresh tokens.
+  See `TODO(backend)` in that file.
+- Email verification.
 - Rate limiting on `/auth/login`.
 
 ## 5. Frontend items still open
@@ -167,9 +193,10 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
 - Project details, Volunteers and Team pages have no wireframe yet; they follow the style of the other
   NGO pages. Update them when the wireframes exist.
 - Nav links still without a page are greyed out as "Soon": AI recommendations, Reports, coordinator
-  Dashboard and Feedback. The admin panel (23b), certificate page (16a) and AI recommendation review (16b)
-  are not started.
-- Password reset (sprint item 19) needs a backend endpoint first; "Forgot password?" shows a notice.
+  Dashboard and Feedback, admin Overview and Audit log. The certificate page (16a) and AI recommendation
+  review (16b) are not started.
+- Password reset screens are built but only move to the next screen; a "Preview" box on the check-email
+  screen opens the next steps. Remove it once real reset emails are sent.
 
 ## 6. Running and deploying
 

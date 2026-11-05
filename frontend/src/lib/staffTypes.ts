@@ -180,16 +180,6 @@ export interface SkillGap {
   volunteersRequired: number;
 }
 
-export interface ChartPoint {
-  label: string;
-  value: number;
-}
-
-export interface SkillShare {
-  skill: string;
-  percent: number;
-}
-
 export interface NgoDashboardData {
   ngoId: number | null;
   status: NgoStatus | null;
@@ -326,4 +316,50 @@ export interface TeamData {
 
 export interface CoordinatorProjectsData {
   projects: ProjectListItem[];
+}
+
+// ---------- 16 · Admin panel (System Administrator) ----------
+
+export interface AdminOrganisation {
+  id: number;
+  name: string;
+  registrationNo: string;
+  status: NgoStatus;
+  /** Name of the first NGO administrator, "—" when none */
+  administrator: string;
+  projects: number;
+  /** Approved volunteers across the organisation's projects */
+  volunteers: number;
+  hoursThisMonth: number;
+  description: string;
+  email: string;
+  phone: string;
+  website: string;
+  address: string;
+  state: string;
+  focusAreas: string;
+}
+
+export interface AdminOrganisationsData {
+  organisations: AdminOrganisation[];
+  activeProjects: number;
+}
+
+export type AdminUserRole = "system_admin" | "ngo_admin" | "coordinator";
+
+export interface AdminUser {
+  /** user id + organisation, unique per row */
+  key: string;
+  userId: number;
+  name: string;
+  email: string;
+  role: AdminUserRole;
+  /** Organisation name, "Platform" for the system admin */
+  organisation: string;
+  status: string;
+}
+
+export interface AdminUsersData {
+  users: AdminUser[];
+  organisations: string[];
 }

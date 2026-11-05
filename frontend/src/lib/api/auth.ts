@@ -174,8 +174,9 @@ export function homeFor(role: AccountRole) {
       return "/dashboard";
     case "project_coordinator":
       return "/coordinator/projects";
+    case "system_admin":
+      return "/admin/organisations";
     default:
-      // ngo_admin, and system_admin (allowed everywhere by the backend; no admin pages yet)
       return "/ngo/dashboard";
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnimatedHeight } from "@/components/ui/AnimatedHeight";
@@ -266,13 +267,9 @@ export function AuthCard() {
         </Button>
 
         <div className="mt-4 flex items-center justify-between text-xs">
-          <button
-            type="button"
-            onClick={() => setNotice("Password reset is not available yet. Please contact your NGO administrator.")}
-            className="rounded text-brand hover:text-brand-hover hover:underline"
-          >
+          <Link href="/forgot-password" className="rounded text-brand hover:text-brand-hover hover:underline">
             Forgot password?
-          </button>
+          </Link>
           <button
             type="button"
             onClick={() => switchMode(mode === "signup" ? "login" : "signup")}
