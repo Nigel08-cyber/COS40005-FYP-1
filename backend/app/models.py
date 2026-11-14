@@ -6,7 +6,10 @@ All timestamps are naive UTC, as in schema.sql.
 """
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time
+from sqlalchemy import (
+    JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time,
+)
+from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -152,6 +155,8 @@ class Event(Base):
     start_datetime: Mapped[datetime] = mapped_column(DateTime)
     end_datetime: Mapped[datetime] = mapped_column(DateTime)
     capacity: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    qr_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # rotating check-in token
+    qr_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | active | completed | cancelled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -188,13 +193,65 @@ class Registration(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class Attendance(Base):
+    """One row per registration, written by the QR scan flow (check-in, then check-out). On PostgreSQL a trigger also
+    computes hours_served from the two times; the API sets it too so SQLite behaves the same."""
+    __tablename__ = "attendance"
+    attendance_id: Mapped[int] = mapped_column(primary_key=True)
+    registration_id: Mapped[int] = mapped_column(ForeignKey("registration.registration_id", ondelete="CASCADE"), unique=True)
+    check_in_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    check_out_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    hours_served: Mapped[float | None] = mapped_column(Numeric(5, 2, asdecimal=False), nullable=True)
+    attendance_status: Mapped[str] = mapped_column(String(20), default="checked_in")  # checked_in | checked_out | absent
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    feedback_id: Mapped[int] = mapped_column(primary_key=True)
+    registration_id: Mapped[int] = mapped_column(ForeignKey("registration.registration_id", ondelete="CASCADE"), unique=True)
+    rating: Mapped[int] = mapped_column(SmallInteger)  # 1..5
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Notification(Base):
+    """In-app notifications (channel in_app, shown in the bell) and queued emails (channel email).
+    related_type/related_id are soft links (for example 'event' and the event id), not foreign keys."""
+    __tablename__ = "notification"
+    notification_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
+    type: Mapped[str] = mapped_column(String(20))  # confirmation | reminder | update | post_event
+    channel: Mapped[str] = mapped_column(String(10))  # in_app | email
+    title: Mapped[str] = mapped_column(String(150))
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    related_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    related_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="scheduled")  # scheduled | sent | failed
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+    log_id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(String(50))
+    entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(INET().with_variant(String(45), "sqlite"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Contribution(Base):
-    """A volunteer's logged hours (the volunteer history). The attendance_id link is written by the QR flow (Sprint 3)."""
+    """A volunteer's logged hours (the volunteer history). Check-out in the QR flow creates one linked by attendance_id."""
     __tablename__ = "contribution"
     contribution_id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("volunteer_profile.user_id", ondelete="CASCADE"))
     project_id: Mapped[int] = mapped_column(ForeignKey("project.project_id"))
     event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attendance_id: Mapped[int | None] = mapped_column(ForeignKey("attendance.attendance_id", ondelete="SET NULL"), unique=True, nullable=True)
     role: Mapped[str | None] = mapped_column(String(80), nullable=True)
     hours: Mapped[float] = mapped_column(Numeric(6, 2, asdecimal=False))
     contribution_date: Mapped[date] = mapped_column(Date)

@@ -432,6 +432,8 @@ class ContributionOut(BaseModel):
     hours: float
     contribution_date: date
     status: str
+    attendance_id: int | None = None  # set when the hours came from a QR check-in/out
+    skills: list[str] = []  # the volunteer's own skills that this project asked for
 
 
 class VolunteerStatsOut(BaseModel):
@@ -497,3 +499,162 @@ class OpportunityOut(BaseModel):
     preferred_start_time: time | None
     preferred_end_time: time | None
     distance_km: float | None      # from the volunteer's saved coordinates, when both sides have them
+
+
+# ---------- Sprint 3: QR attendance (items 25, 25a) ----------
+
+class QrOut(BaseModel):
+    event_id: int
+    token: str
+    scan_url: str  # encode THIS in the QR image: phone cameras open it, the app's scanner can read the token from it
+    expires_at: datetime
+    ttl_seconds: int  # seconds left, so the screen can show a countdown
+
+
+class ScanIn(BaseModel):
+    token: str = Field(min_length=8, max_length=300)  # the raw token, or the whole scan_url
+
+
+class AttendanceOut(BaseModel):
+    attendance_id: int
+    event_id: int
+    event_title: str
+    action: Literal["checked_in", "checked_out"]
+    check_in_time: datetime | None
+    check_out_time: datetime | None
+    hours_served: float | None
+    attendance_status: str
+
+
+class MyAttendanceOut(BaseModel):
+    event_id: int
+    status: Literal["not_arrived", "checked_in", "checked_out", "absent"]
+    check_in_time: datetime | None = None
+    check_out_time: datetime | None = None
+    hours_served: float | None = None
+
+
+class AttendanceRowOut(BaseModel):
+    user_id: int
+    full_name: str
+    email: str
+    registration_id: int
+    attendance_id: int | None
+    status: Literal["not_arrived", "checked_in", "checked_out", "absent"]
+    check_in_time: datetime | None
+    check_out_time: datetime | None
+    hours_served: float | None
+
+
+class EventAttendanceOut(BaseModel):
+    event_id: int
+    title: str
+    registered: int
+    checked_in: int  # arrived and still there
+    checked_out: int
+    not_arrived: int
+    total_hours: float
+    rows: list[AttendanceRowOut]
+
+
+class ManualAttendanceIn(BaseModel):
+    """Coordinator correction (forgot to scan, phone died). Either set the times, or absent=true."""
+    check_in_time: datetime | None = None
+    check_out_time: datetime | None = None
+    absent: bool = False
+
+    _utc = field_validator("check_in_time", "check_out_time")(_naive_utc)
+
+
+# ---------- Sprint 3: feedback (27a) ----------
+
+class FeedbackIn(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comments: str | None = Field(default=None, max_length=2000)
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    feedback_id: int
+    rating: int
+    comments: str | None
+    submitted_at: datetime
+    event_id: int | None = None
+
+
+class FeedbackRowOut(BaseModel):
+    feedback_id: int
+    volunteer_name: str
+    rating: int
+    comments: str | None
+    submitted_at: datetime
+
+
+class EventFeedbackOut(BaseModel):
+    event_id: int
+    title: str
+    count: int
+    average_rating: float | None
+    rating_counts: dict[int, int]  # {1: n, ..., 5: n}
+    rows: list[FeedbackRowOut]
+
+
+class PendingFeedbackOut(BaseModel):
+    """An event the volunteer attended and has not reviewed yet."""
+    event_id: int
+    event_title: str
+    project_title: str
+    end_datetime: datetime
+
+
+# ---------- Sprint 3: contributions (27) ----------
+
+class ContributionStaffOut(BaseModel):
+    contribution_id: int
+    user_id: int
+    volunteer_name: str
+    event_id: int | None
+    event_title: str | None
+    role: str | None
+    hours: float
+    contribution_date: date
+    status: str
+    attendance_id: int | None
+
+
+class ContributionStatusIn(BaseModel):
+    status: Literal["pending", "verified", "rejected"]
+
+
+# ---------- Sprint 3: notifications and audit log ----------
+
+class NotificationOut(BaseModel):
+    notification_id: int
+    type: str
+    title: str
+    content: str | None
+    related_type: str | None
+    related_id: int | None
+    is_read: bool
+    created_at: datetime | None
+
+
+class UnreadCountOut(BaseModel):
+    unread: int
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    log_id: int
+    user_id: int | None
+    action: str
+    entity_type: str | None
+    entity_id: int | None
+    details: dict | None
+    ip_address: str | None
+    created_at: datetime
+
+    @field_validator("ip_address", mode="before")
+    @classmethod
+    def _ip_text(cls, v):  # PostgreSQL's inet comes back as an ipaddress object
+        return None if v is None else str(v)

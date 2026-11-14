@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -47,7 +47,7 @@ def _issue(db: Session, user: User, response: Response) -> TokenOut:
 
 
 @router.post("/register", response_model=TokenOut, status_code=201)
-def register(body: RegisterIn, response: Response, db: Session = Depends(get_db)):
+def register(body: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)):
     """Volunteers get a users row plus an empty volunteer_profile. NGO admins get a users row and then
     create their organisation with POST /ngos (which makes them its ngo_admin). Platform admins and
     coordinators are never self-registered."""
@@ -60,15 +60,17 @@ def register(body: RegisterIn, response: Response, db: Session = Depends(get_db)
     if body.role == "volunteer":
         db.add(VolunteerProfile(user_id=user.user_id))
     db.commit()
+    request.state.audit_user_id = user.user_id
     return _issue(db, user, response)
 
 
 @router.post("/login", response_model=TokenOut)
-def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     ok = verify_password(body.password, user.password_hash if user else None)
     if not user or not ok or user.account_status != "active":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
+    request.state.audit_user_id = user.user_id
     return _issue(db, user, response)
 
 
@@ -145,12 +147,13 @@ def check_password_reset(body: PasswordResetTokenIn, db: Session = Depends(get_d
 
 
 @router.post("/password-reset/confirm", status_code=204)
-def confirm_password_reset(body: PasswordResetConfirmIn, db: Session = Depends(get_db)):
+def confirm_password_reset(body: PasswordResetConfirmIn, request: Request, db: Session = Depends(get_db)):
     """Sets the new password, uses up the link and signs the account out everywhere (all refresh tokens revoked)."""
     row = _usable_reset_token(db, body.token)
     if row is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid or has expired")
     now = utcnow()
+    request.state.audit_user_id = row.user_id
     db.get(User, row.user_id).password_hash = hash_password(body.new_password)
     for t in db.scalars(select(PasswordResetToken).where(PasswordResetToken.user_id == row.user_id, PasswordResetToken.used_at.is_(None))):
         t.used_at = now

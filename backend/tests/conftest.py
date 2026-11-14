@@ -6,6 +6,7 @@ from pathlib import Path
 PG_URL = os.environ.get("TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = PG_URL or "sqlite://"
 os.environ["JWT_SECRET"] = "test-secret-test-secret-test-secret-32b"
+os.environ["SCHEDULER_ENABLED"] = "false"  # tests call the scheduler functions directly
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import audit
 from app.database import Base, get_db
 from app.main import app
 from app.models import Ngo, NgoMember, User, VolunteerProfile
@@ -51,8 +53,9 @@ def db_session(pg_engine):
 
 
 @pytest.fixture()
-def client(db_session):
+def client(db_session, monkeypatch):
     app.dependency_overrides[get_db] = lambda: db_session
+    monkeypatch.setattr(audit, "open_session", lambda: (db_session, False))  # audit rows go to the test database
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -114,3 +117,44 @@ def apply_and_approve(client, ngo, pid, email):
     r = client.patch(f"/applications/{a.json()['application_id']}", json={"decision": "approved"}, headers=ngo)
     assert r.status_code == 200, r.text
     return vh
+
+
+class Clock:
+    """Freezes 'now' for the attendance endpoints. clock.set('2026-11-01T09:05:00')"""
+    def __init__(self):
+        from datetime import datetime
+        self._dt = datetime(2026, 11, 1, 9, 0, 0)
+        self._parse = datetime.fromisoformat
+
+    def set(self, iso: str):
+        self._dt = self._parse(iso)
+
+    def __call__(self):
+        return self._dt
+
+
+@pytest.fixture()
+def clock(monkeypatch):
+    c = Clock()
+    monkeypatch.setattr("app.routers.attendance.utcnow", c)
+    monkeypatch.setattr("app.routers.feedback.utcnow", c)
+    return c
+
+
+def register_for_event(client, ngo, pid, eid, email):
+    """Approved + registered volunteer; returns their auth header."""
+    vh = apply_and_approve(client, ngo, pid, email)
+    r = client.post(f"/events/{eid}/registrations", headers=vh)
+    assert r.status_code == 201 and r.json()["status"] == "registered", r.text
+    return vh
+
+
+def user_id_of(client, headers):
+    return client.get("/auth/me", headers=headers).json()["user_id"]
+
+
+@pytest.fixture(autouse=True)
+def no_background_mail(monkeypatch):
+    """Registration queues the email and a background task delivers it. Tests deliver explicitly (deliver_pending)
+    so they are the same on SQLite and PostgreSQL (the background task opens its own database session)."""
+    monkeypatch.setattr("app.notifications.deliver_pending_background", lambda: None)
