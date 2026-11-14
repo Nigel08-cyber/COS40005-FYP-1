@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from app import notifications
 from app.database import get_db
 from app.deps import assert_ngo_staff, get_current_user, require_volunteer
-from app.models import Event, Project, ProjectApplication, Registration, User, utcnow
-from app.schemas import ApplicationOut, DecisionIn, MyStatusOut, RegistrationOut
+from app.models import Event, Project, ProjectApplication, Registration, Skill, User, VolunteerProfile, VolunteerSkill, utcnow
+from app.schemas import ApplicationDetailOut, ApplicationOut, ApplicantSkillOut, DecisionIn, MyStatusOut, RegistrationOut
 from app.services import count_status, promote_waitlist
 
 router = APIRouter(tags=["applications"])
@@ -79,12 +79,33 @@ def withdraw(project_id: int, db: Session = Depends(get_db), user: User = Depend
     return app
 
 
-@router.get("/projects/{project_id}/applications", response_model=list[ApplicationOut])
+@router.get("/projects/{project_id}/applications", response_model=list[ApplicationDetailOut])
 def list_applications(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Applicants of one project with their name, email and skills (NGO staff of that project only)."""
     project = _project(db, project_id)
     assert_ngo_staff(db, user, project.ngo_id)
-    return db.scalars(select(ProjectApplication).where(ProjectApplication.project_id == project_id)
+    apps = db.scalars(select(ProjectApplication).where(ProjectApplication.project_id == project_id)
                       .order_by(ProjectApplication.applied_at, ProjectApplication.application_id)).all()
+    ids = [a.user_id for a in apps]
+    people = {u.user_id: u for u in db.scalars(select(User).where(User.user_id.in_(ids)))} if ids else {}
+    years = dict(db.execute(select(VolunteerProfile.user_id, VolunteerProfile.years_experience)
+                            .where(VolunteerProfile.user_id.in_(ids))).all()) if ids else {}
+    skills: dict[int, list[ApplicantSkillOut]] = {}
+    if ids:
+        for uid, sid, name, level, yrs in db.execute(
+                select(VolunteerSkill.user_id, Skill.skill_id, Skill.skill_name,
+                       VolunteerSkill.proficiency_level, VolunteerSkill.years_experience)
+                .join(Skill, Skill.skill_id == VolunteerSkill.skill_id)
+                .where(VolunteerSkill.user_id.in_(ids)).order_by(Skill.skill_name)).all():
+            skills.setdefault(uid, []).append(ApplicantSkillOut(
+                skill_id=sid, skill_name=name, proficiency_level=level, years_experience=yrs))
+    out = []
+    for a in apps:
+        who = people.get(a.user_id)
+        out.append(ApplicationDetailOut.model_validate(a).model_copy(update={
+            "full_name": who.full_name if who else None, "email": who.email if who else None,
+            "years_experience": years.get(a.user_id), "skills": skills.get(a.user_id, [])}))
+    return out
 
 
 @router.patch("/applications/{application_id}", response_model=ApplicationOut)

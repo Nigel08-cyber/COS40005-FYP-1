@@ -6,7 +6,7 @@ import { useState } from "react";
 import { SkillTag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, Placeholder } from "@/components/ui/Card";
-import { TextField } from "@/components/ui/Fields";
+import { TextArea, TextField } from "@/components/ui/Fields";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ChipPicker, FieldLabel, FileField, FormSection, LabeledSelect, RemovableChips, toggle } from "@/components/staff/FormParts";
 import { ApprovalBanner, NotSavedHint } from "@/components/staff/StaffNotices";
@@ -125,10 +125,11 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
                 options={options.types}
               />
               <div className="sm:col-span-2">
-                <TextField
+                <TextArea
                   id="orgDescription"
                   label="Description"
                   required
+                  rows={5}
                   placeholder="What does your organisation do? Who do you serve?"
                   value={profile.description}
                   error={errors.description}
@@ -321,7 +322,7 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
                 )}
               </div>
             )}
-            <p className={profile.description.trim() ? "mt-3 text-xs leading-relaxed text-ink-soft" : "mt-3 text-xs italic text-faint"}>
+            <p className={profile.description.trim() ? "mt-3 max-h-48 overflow-y-auto whitespace-pre-line break-words text-xs leading-relaxed text-ink-soft [overflow-wrap:anywhere]" : "mt-3 text-xs italic text-faint"}>
               {profile.description.trim() || "Your description will appear here."}
             </p>
           </Card>

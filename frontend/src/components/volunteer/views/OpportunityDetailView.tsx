@@ -50,7 +50,7 @@ function Detail({ o }: { o: NonNullable<Awaited<ReturnType<typeof getOpportunity
         <div className="space-y-4">
           <Card className="p-5">
             <CardTitle>About this activity</CardTitle>
-            <p className="mt-2 text-sm leading-relaxed text-ink-soft">{o.summary}</p>
+            <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-ink-soft [overflow-wrap:anywhere]">{o.summary}</p>
             <h3 className="mt-4 text-xs font-semibold">What you will do</h3>
             <ul className="mt-2 space-y-1.5">
               {o.tasks.map((t) => (
