@@ -1,4 +1,24 @@
-# VolunteerHub API (FastAPI)
+<h1 align="center">VolunteerHub API</h1>
+
+<p align="center">
+  <strong>FastAPI back end for VolunteerHub.</strong><br>
+  Auth, NGOs, projects, events, applications, QR attendance, notifications and the audit log.
+</p>
+
+<p align="center">
+  <img alt="API: FastAPI" src="https://img.shields.io/badge/api-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="Database: PostgreSQL on Neon" src="https://img.shields.io/badge/db-PostgreSQL%20on%20Neon-336791?style=flat-square&logo=postgresql&logoColor=white">
+  <img alt="Tests: 87 passing" src="https://img.shields.io/badge/tests-87%20passing-brightgreen?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="../README.md">Project overview</a> ·
+  <a href="#database">Database</a> ·
+  <a href="#tests">Tests</a> ·
+  <a href="#endpoints">Endpoints</a> ·
+  <a href="#scheduler-item-26a">Scheduler</a> ·
+  <a href="#staging-item-30-vercel--neon--this-backend-on-your-machine-through-tailscale-funnel">Staging</a>
+</p>
 
 Run locally (PowerShell, from `backend/`):
 
