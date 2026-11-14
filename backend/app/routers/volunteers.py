@@ -133,9 +133,19 @@ def my_contributions(db: Session = Depends(get_db), user: User = Depends(require
     rows = db.execute(select(Contribution, Project.title).join(Project, Project.project_id == Contribution.project_id)
                       .where(Contribution.user_id == user.user_id)
                       .order_by(Contribution.contribution_date.desc(), Contribution.contribution_id.desc())).all()
+    # skills contributed per project = the volunteer's own skills that the project asked for
+    pids = {c.project_id for c, _ in rows}
+    skills: dict[int, list[str]] = defaultdict(list)
+    if pids:
+        for pid, name in db.execute(select(ProjectRequiredSkill.project_id, Skill.skill_name).join(
+                Skill, Skill.skill_id == ProjectRequiredSkill.skill_id).join(
+                VolunteerSkill, (VolunteerSkill.skill_id == Skill.skill_id) & (VolunteerSkill.user_id == user.user_id)).where(
+                ProjectRequiredSkill.project_id.in_(pids)).order_by(Skill.skill_name)):
+            skills[pid].append(name)
     return [ContributionOut(contribution_id=c.contribution_id, project_id=c.project_id, project_title=t,
                             event_id=c.event_id, role=c.role, hours=c.hours,
-                            contribution_date=c.contribution_date, status=c.status) for c, t in rows]
+                            contribution_date=c.contribution_date, status=c.status,
+                            attendance_id=c.attendance_id, skills=skills.get(c.project_id, [])) for c, t in rows]
 
 
 @router.get("/me/stats", response_model=VolunteerStatsOut)

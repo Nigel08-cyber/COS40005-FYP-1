@@ -8,10 +8,11 @@ Applications (project level) and registrations (event level), following schema.s
 - A full event puts the volunteer on a waitlist (registration.status = 'waitlisted', migrations/002).
   When a spot frees up (cancel, withdraw, capacity raised) the oldest waitlisted volunteer is promoted.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.database import get_db
 from app.deps import assert_ngo_staff, get_current_user, require_volunteer
 from app.models import Event, Project, ProjectApplication, Registration, User, utcnow
@@ -104,7 +105,7 @@ def decide(application_id: int, body: DecisionIn, db: Session = Depends(get_db),
 # ---------- registrations (per event) ----------
 
 @router.post("/events/{event_id}/registrations", response_model=RegistrationOut, status_code=201)
-def register(event_id: int, db: Session = Depends(get_db), user: User = Depends(require_volunteer)):
+def register(event_id: int, background: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(require_volunteer)):
     # lock the event row so two volunteers cannot take the last spot at once (no-op on SQLite)
     event = db.scalar(select(Event).where(Event.event_id == event_id).with_for_update())
     if not event or event.status != "active":
@@ -124,7 +125,10 @@ def register(event_id: int, db: Session = Depends(get_db), user: User = Depends(
     else:
         reg = Registration(event_id=event_id, user_id=user.user_id, status=new_status)
         db.add(reg)
+    db.flush()
+    notifications.notify_registration(db, reg, event)  # confirmation: in-app now, email in the background
     db.commit()
+    background.add_task(notifications.deliver_pending_background)
     return reg
 
 

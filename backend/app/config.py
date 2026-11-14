@@ -18,8 +18,37 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     password_reset_minutes: int = 30
     password_reset_cooldown_seconds: int = 60  # at most one reset email per account per minute
-    # "log" writes the link to the server log (development). Brevo (backlog item 26) replaces it.
+    # "log" writes mail to the server log (development); "brevo" sends through the Brevo API (item 26).
     email_backend: str = "log"
+    brevo_api_key: str = ""  # secret: environment / .env only, never committed
+    mail_from_email: str = ""  # must be a sender verified in Brevo
+    mail_from_name: str = "Volunteer Hub"
+
+    # "production" makes startup refuse an unsafe configuration (default JWT secret, insecure cookie)
+    environment: str = "development"
+    # Sprint 3: notifications, scheduler, QR attendance, audit log
+    display_timezone: str = "Asia/Kuala_Lumpur"  # times in emails; the database stores naive UTC
+    scheduler_enabled: bool = True  # run ONE backend process (uvicorn without --workers) or reminders are sent twice
+    scheduler_interval_seconds: int = 60
+    reminder_hours_before: int = 24  # reminder goes out when an event starts within this many hours
+    post_event_window_days: int = 3  # a thank-you is still sent up to this long after an event ended
+    qr_ttl_minutes: int = 5  # a check-in QR code changes after this long
+    qr_grace_seconds: int = 30  # a scan just after expiry still counts (slow phone camera)
+    checkin_early_minutes: int = 30  # check-in opens this long before the event starts
+    checkout_grace_minutes: int = 180  # check-out closes this long after the event ends
+    min_stay_seconds: int = 60  # a second scan sooner than this after check-in is treated as a double scan
+    trust_proxy_headers: bool = False  # true behind Tailscale Funnel / a reverse proxy: audit log reads X-Forwarded-For
+
+    def config_problems(self) -> list[str]:
+        """Things that must not reach production. ENVIRONMENT=production turns them into a refusal to start."""
+        problems = []
+        if self.jwt_secret == "dev-only-change-me" or len(self.jwt_secret) < 32:
+            problems.append("JWT_SECRET is the development default or shorter than 32 characters")
+        if not self.cookie_secure:
+            problems.append("COOKIE_SECURE is false (the refresh cookie would travel over plain HTTP)")
+        if "localhost" in self.cors_origins and self.environment == "production":
+            problems.append("CORS_ORIGINS still lists localhost")
+        return problems
 
     @property
     def cors_origin_list(self) -> list[str]:

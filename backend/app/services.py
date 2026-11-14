@@ -2,6 +2,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import notifications
 from app.models import Event, ProjectApplication, Registration, utcnow
 from app.schemas import EventOut
 
@@ -35,5 +36,6 @@ def promote_waitlist(db: Session, event: Event) -> list[Registration]:
         else:
             nxt.status = "registered"
             promoted.append(nxt)
+            notifications.notify_promoted(db, nxt, event)
         db.flush()
     return promoted
