@@ -48,14 +48,28 @@ export function NoOrganisationCard() {
 /** Banner while a platform admin has not approved (or has suspended) the organisation. */
 export function ApprovalBanner({ status }: { status: NgoStatus | null }) {
   if (status !== "pending" && status !== "suspended") return null;
+  const pending = status === "pending";
   return (
     <div
       role="status"
-      className="mb-6 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning"
+      // sticks under the top nav (h-14) so it stays visible while the page scrolls
+      className={cx(
+        "sticky top-16 z-30 mb-6 flex items-start gap-3 rounded-xl border-2 px-4 py-3 text-sm shadow-md",
+        pending ? "border-warning/50 bg-warning-soft text-warning" : "border-danger/50 bg-danger-soft text-danger",
+      )}
     >
-      {status === "pending"
-        ? "Your organisation is waiting for approval by a platform admin. You can create projects once it is approved."
-        : "Your organisation has been suspended by a platform admin. Projects cannot be created or published."}
+      <svg viewBox="0 0 20 20" fill="none" className="mt-0.5 size-5 shrink-0" aria-hidden>
+        <path d="M10 3l8 14H2L10 3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M10 8v4M10 14.5v.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      <div>
+        <p className="font-semibold">{pending ? "Waiting for approval" : "Organisation suspended"}</p>
+        <p>
+          {pending
+            ? "A platform admin has to approve your organisation before you can create projects."
+            : "A platform admin suspended your organisation. Projects cannot be created or published."}
+        </p>
+      </div>
     </div>
   );
 }

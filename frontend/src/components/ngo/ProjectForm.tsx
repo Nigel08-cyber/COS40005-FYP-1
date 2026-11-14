@@ -145,10 +145,11 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
                 {errors.coordinatorId && <p className="pt-1 text-xs text-danger">{errors.coordinatorId}</p>}
               </div>
               <div className="sm:col-span-2">
-                <TextField
+                <TextArea
                   id="projectDescription"
                   label="Description"
-                  placeholder="Describe the activity, what volunteers will do and what to bring"
+                  rows={6}
+                  placeholder="Describe the activity, what volunteers will do and what to bring. Line breaks are kept."
                   value={draft.description}
                   onChange={(v) => set("description", v)}
                 />
@@ -254,6 +255,7 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
                 placeholder="e.g. Must be comfortable lifting 10 kg, experience working with families"
                 value={draft.additionalRequirements}
                 onChange={(v) => set("additionalRequirements", v)}
+                rows={6}
               />
             </div>
           </FormSection>

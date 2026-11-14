@@ -199,7 +199,7 @@ function OrganisationDetails({ org }: { org: AdminOrganisation }) {
   return (
     <div className="mt-4 rounded-lg border border-line bg-canvas p-4">
       <p className="font-semibold text-ink">{org.name}</p>
-      <p className="mt-1 text-sm text-ink-soft">{org.description || <span className="text-faint">No description.</span>}</p>
+      <p className="mt-1 whitespace-pre-line break-words [overflow-wrap:anywhere] text-sm text-ink-soft">{org.description || <span className="text-faint">No description.</span>}</p>
       <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label} className="flex justify-between gap-3 border-b border-line py-1.5">

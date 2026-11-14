@@ -158,7 +158,7 @@ export function ProjectDetails({ data }: { data: ProjectDetailData }) {
         <div className="min-w-0 space-y-4">
           <Card className="p-5">
             <CardTitle>About this project</CardTitle>
-            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-soft">
+            <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-ink-soft [overflow-wrap:anywhere]">
               {project.description || <span className="text-faint">No description yet.</span>}
             </p>
           </Card>

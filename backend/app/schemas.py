@@ -204,6 +204,22 @@ class ApplicationOut(BaseModel):
     coordinator_note: str | None
 
 
+class ApplicantSkillOut(BaseModel):
+    skill_id: int
+    skill_name: str
+    proficiency_level: int
+    years_experience: int | None = None
+
+
+class ApplicationDetailOut(ApplicationOut):
+    """What NGO staff see when reviewing applicants: the volunteer's name, email and skills."""
+    applied_at: datetime | None = None
+    full_name: str | None = None
+    email: str | None = None
+    years_experience: int | None = None
+    skills: list[ApplicantSkillOut] = []
+
+
 class DecisionIn(BaseModel):
     decision: Literal["approved", "rejected"]
     coordinator_note: str | None = None

@@ -113,31 +113,41 @@ export function FieldError({ id, message }: { id?: string; message?: string }) {
 export function TextArea({
   id,
   label,
+  required,
   value,
   onChange,
+  error,
   labelExtra,
   ...rest
 }: {
   id: string;
   label: string;
+  required?: boolean;
   value: string;
   onChange: (value: string) => void;
+  /** Shown under the field in red; also marks the box invalid */
+  error?: string;
   /** Rendered after the label, e.g. a "Not saved yet" tag */
   labelExtra?: React.ReactNode;
 } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange">) {
+  const errorId = `${id}-error`;
   return (
     <div>
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-ink">
         {label}
+        {required && " *"}
         {labelExtra}
       </label>
       <textarea
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={cx(inputClass, "min-h-24 resize-y py-2.5")}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        className={cx(inputBase, error ? inputError : inputOk, "min-h-24 resize-y py-2.5")}
         {...rest}
       />
+      <FieldError id={errorId} message={error} />
     </div>
   );
 }

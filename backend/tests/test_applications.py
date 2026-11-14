@@ -109,3 +109,29 @@ def test_my_applications_statuses_and_access(client, db_session):
     client.post(f"/projects/{pid}/applications", headers=vh)
     assert client.get("/me/applications", headers=vh).json() == [{"project_id": pid, "status": "pending"}]
     assert client.get("/me/applications", headers=ngo).status_code == 403
+
+
+def test_applicant_list_shows_name_email_and_skills(client, db_session):
+    from app.models import Skill
+    ngo, ngo_id, pid, eid = setup_event(client, db_session)
+    first, second = Skill(skill_name="First aid"), Skill(skill_name="Logistics")
+    db_session.add_all([first, second]); db_session.commit()
+    vh = signup(client, "v@example.com")
+    client.put("/me/profile", json={"bio": "Hi", "years_experience": 3, "interests": [],
+                                    "skills": [{"skill_id": second.skill_id, "proficiency_level": 2},
+                                               {"skill_id": first.skill_id, "proficiency_level": 4, "years_experience": 1}]}, headers=vh)
+    client.post(f"/projects/{pid}/applications", headers=vh)
+    signup(client, "plain@example.com")  # an applicant with no profile still lists
+    client.post(f"/projects/{pid}/applications", headers=login(client, "plain@example.com"))
+    rows = client.get(f"/projects/{pid}/applications", headers=ngo).json()
+    assert len(rows) == 2
+    one = next(r for r in rows if r["email"] == "v@example.com")
+    assert one["full_name"] and one["applied_at"] and one["years_experience"] == 3
+    assert [s["skill_name"] for s in one["skills"]] == ["First aid", "Logistics"]
+    assert one["skills"][0]["proficiency_level"] == 4 and one["skills"][0]["years_experience"] == 1
+    plain = next(r for r in rows if r["email"] == "plain@example.com")
+    assert plain["skills"] == [] and plain["years_experience"] is None
+    # still staff only, and the decision response is unchanged
+    assert client.get(f"/projects/{pid}/applications", headers=vh).status_code == 403
+    aid = one["application_id"]
+    assert "skills" not in client.patch(f"/applications/{aid}", json={"decision": "approved"}, headers=ngo).json()
