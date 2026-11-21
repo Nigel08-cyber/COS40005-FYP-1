@@ -205,6 +205,34 @@ export async function getAccessToken() {
   return (await restoreSession()) ? accessToken : null;
 }
 
+const RETURN_PATH_KEY = "vh.returnTo";
+
+/**
+ * QR and feedback links can be opened while signed out: remember them so login can continue there.
+ * Returns true for those links (the visitor already has an account, so they should see "Log in").
+ */
+export function rememberReturnPath() {
+  const { pathname, search } = window.location;
+  if (pathname !== "/check-in" && !pathname.startsWith("/feedback/")) return false;
+  try {
+    sessionStorage.setItem(RETURN_PATH_KEY, pathname + search);
+  } catch {
+    // Storage blocked: the volunteer simply lands on their dashboard after login
+  }
+  return true;
+}
+
+/** The remembered page (used once), or null. */
+export function takeReturnPath() {
+  try {
+    const path = sessionStorage.getItem(RETURN_PATH_KEY);
+    sessionStorage.removeItem(RETURN_PATH_KEY);
+    return path?.startsWith("/") && !path.startsWith("//") ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Where each role lands after logging in. */
 export function homeFor(role: AccountRole) {
   switch (role) {

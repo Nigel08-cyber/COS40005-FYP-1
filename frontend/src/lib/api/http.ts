@@ -62,10 +62,20 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+/** Milliseconds for an API time. Extra microsecond digits are dropped because not every phone browser parses them. */
+export function utcMs(utc: string) {
+  return new Date(`${utc.slice(0, 19)}Z`).getTime();
+}
+
 /** "2026-10-17T01:00:00" (UTC from the API) -> "2026-10-17T09:00" (Malaysia local time) */
 export function utcToLocal(utc: string) {
-  const d = new Date(new Date(`${utc}Z`).getTime() + MYT_OFFSET_MS);
+  const d = new Date(utcMs(utc) + MYT_OFFSET_MS);
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+/** Malaysia local "YYYY-MM-DD" + "HH:mm" -> naive UTC "YYYY-MM-DDTHH:mm:00" (what the backend stores). */
+export function localToUtc(date: string, hhmm: string) {
+  return new Date(`${date}T${hhmm}:00+08:00`).toISOString().slice(0, 19);
 }
 
 /** Today's date in Malaysia as "YYYY-MM-DD". */

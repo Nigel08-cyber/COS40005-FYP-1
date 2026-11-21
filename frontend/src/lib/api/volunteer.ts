@@ -150,16 +150,80 @@ export async function getMyApplications(): Promise<Application[]> {
   return rows.map((r) => ({ opportunityId: String(r.project_id), status: r.status }));
 }
 
+interface EventRow {
+  event_id: number;
+  project_id: number;
+  venue: string | null;
+  start_datetime: string;
+  end_datetime: string;
+  capacity: number | null;
+  status: string;
+  registered_count: number;
+  waitlist_count: number;
+}
+
+type DateStatus = "registered" | "waitlisted";
+
+const isUpcoming = (e: EventRow) => e.status === "active" && e.end_datetime >= new Date().toISOString().slice(0, 19);
+
+async function getMyRegistrations() {
+  const rows = await api<{ event_id: number; status: DateStatus }[]>("/me/registrations");
+  return new Map(rows.map((r) => [r.event_id, r.status]));
+}
+
+/** Shows the date the volunteer signed up for (their earliest one) instead of the project's next date. */
+function forMyDate(o: OpportunityApi, events: EventRow[], registrations: Map<number, DateStatus>): OpportunityApi {
+  const mine = events
+    .filter((e) => e.project_id === o.project_id && registrations.has(e.event_id) && isUpcoming(e))
+    .sort((a, b) => a.start_datetime.localeCompare(b.start_datetime));
+  const e = mine.find((x) => registrations.get(x.event_id) === "registered") ?? mine[0];
+  if (!e || e.event_id === o.event_id) return o;
+  return {
+    ...o,
+    event_id: e.event_id,
+    venue: e.venue,
+    start: e.start_datetime,
+    end: e.end_datetime,
+    volunteers_needed: e.capacity || o.volunteers_needed,
+    registered_count: e.registered_count,
+    waitlist_count: e.waitlist_count,
+  };
+}
+
 export async function getOpportunities(): Promise<Opportunity[]> {
-  const [rows, mine] = await Promise.all([api<OpportunityApi[]>("/opportunities"), getMyApplications()]);
+  const [rows, mine, registrations] = await Promise.all([
+    api<OpportunityApi[]>("/opportunities"),
+    getMyApplications(),
+    getMyRegistrations(),
+  ]);
+  const loaded = await Promise.all(
+    [...registrations.keys()].map((id) => api<EventRow>(`/events/${id}`).catch(() => null)),
+  );
+  const events = loaded.filter((e): e is EventRow => e !== null);
   const status = new Map(mine.map((a) => [a.opportunityId, a.status]));
-  return rows.map((o) => toOpportunity(o, status.get(String(o.project_id))));
+  return rows.map((o) => toOpportunity(forMyDate(o, events, registrations), status.get(String(o.project_id))));
 }
 
 export async function getOpportunity(id: string): Promise<Opportunity | null> {
   try {
-    const [row, mine] = await Promise.all([api<OpportunityApi>(`/opportunities/${encodeURIComponent(id)}`), getMyApplications()]);
-    return toOpportunity(row, mine.find((a) => a.opportunityId === id)?.status);
+    const [row, mine, events, registrations] = await Promise.all([
+      api<OpportunityApi>(`/opportunities/${encodeURIComponent(id)}`),
+      getMyApplications(),
+      api<EventRow[]>(`/projects/${encodeURIComponent(id)}/events`),
+      getMyRegistrations(),
+    ]);
+    return {
+      ...toOpportunity(forMyDate(row, events, registrations), mine.find((a) => a.opportunityId === id)?.status),
+      sessions: events.filter(isUpcoming).map((e) => ({
+        id: e.event_id,
+        start: utcToLocal(e.start_datetime),
+        end: utcToLocal(e.end_datetime),
+        capacity: e.capacity,
+        registered: e.registered_count,
+        waitlisted: e.waitlist_count,
+        myStatus: registrations.get(e.event_id) ?? null,
+      })),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
@@ -192,6 +256,21 @@ export async function registerForOpportunity(projectId: string): Promise<"regist
 /** Cancels a registration or leaves the waitlist. */
 export async function cancelRegistration(projectId: string) {
   const eventId = await currentEventId(projectId);
+  await api(`/events/${eventId}/registrations/me`, { method: "DELETE" });
+}
+
+/** How many dates are still open; with more than one the volunteer picks on the activity page. */
+export async function countUpcomingDates(projectId: string) {
+  return (await api<EventRow[]>(`/projects/${projectId}/events`)).filter(isUpcoming).length;
+}
+
+/** Registers for one date. A full date puts the volunteer on its waitlist instead. */
+export async function registerForDate(eventId: number): Promise<DateStatus> {
+  return (await api<{ status: DateStatus }>(`/events/${eventId}/registrations`, { method: "POST" })).status;
+}
+
+/** Cancels the registration, or leaves the waitlist, for one date. */
+export async function cancelDate(eventId: number) {
   await api(`/events/${eventId}/registrations/me`, { method: "DELETE" });
 }
 
@@ -255,10 +334,15 @@ export async function getCertificates(): Promise<Certificate[]> {
 }
 
 export async function getPastActivities(): Promise<PastActivity[]> {
-  const rows = await api<{ event_id: number; project_title: string; venue: string | null; start_datetime: string; hours: number | null }[]>(
-    "/me/activities?past=true",
-  );
+  const [rows, pending] = await Promise.all([
+    api<{ event_id: number; project_title: string; venue: string | null; start_datetime: string; hours: number | null }[]>(
+      "/me/activities?past=true",
+    ),
+    api<{ event_id: number }[]>("/me/feedback/pending"),
+  ]);
+  const toRate = new Set(pending.map((p) => p.event_id));
   return rows.map((a) => ({
+    needsFeedback: toRate.has(a.event_id),
     id: String(a.event_id),
     title: a.project_title,
     date: utcToLocal(a.start_datetime).slice(0, 10),

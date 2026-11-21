@@ -23,6 +23,17 @@ export interface Volunteer {
   roleLabel: string;
 }
 
+/** One date of a project, with the signed-in volunteer's registration for that date. */
+export interface OpportunitySession {
+  id: number;
+  start: string;
+  end: string;
+  capacity: number | null;
+  registered: number;
+  waitlisted: number;
+  myStatus: "registered" | "waitlisted" | null;
+}
+
 export interface Opportunity {
   id: string;
   title: string;
@@ -39,6 +50,8 @@ export interface Opportunity {
   distanceKm: number | null;
   /** The event that Register / Cancel act on (the next upcoming one), if the project has one */
   eventId?: number | null;
+  /** Every upcoming date of the project, soonest first (only loaded on the detail page) */
+  sessions?: OpportunitySession[];
   skills: string[];
   volunteersNeeded: number;
   /** Registered volunteers, not counting the signed-in volunteer */
@@ -96,6 +109,8 @@ export interface PastActivity {
   area: string;
   hours: number;
   role: string;
+  /** The volunteer attended and has not rated this activity yet */
+  needsFeedback: boolean;
 }
 
 export type DayPart = "Morning" | "Afternoon" | "Evening";

@@ -200,32 +200,6 @@ export interface NgoDashboardData {
   upcomingProjects: ProjectListItem[];
 }
 
-// ---------- 15a · Attendance (Project Coordinator) ----------
-
-export type AttendanceStatus = "checked_in" | "checked_out" | "not_arrived";
-
-export interface AttendanceRecord {
-  id: string;
-  volunteer: string;
-  role: string;
-  /** "HH:mm" */
-  checkIn?: string;
-  checkOut?: string;
-  status: AttendanceStatus;
-}
-
-export interface AttendanceEvent {
-  id: string;
-  title: string;
-  /** Local Malaysia time, "YYYY-MM-DDTHH:mm" */
-  start: string;
-  end: string;
-  area: string;
-  expectedVolunteers: number;
-  /** How long one QR token is valid before it rotates */
-  qrRefreshSeconds: number;
-}
-
 // ---------- Project details, applications and team (NGO Administrator + Project Coordinator) ----------
 
 export type ProjectStatus = "draft" | ProjectState;

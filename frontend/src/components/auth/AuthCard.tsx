@@ -2,14 +2,14 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { AnimatedHeight } from "@/components/ui/AnimatedHeight";
 import { Button } from "@/components/ui/Button";
 import { FieldError, TextField } from "@/components/ui/Fields";
 import { SLIDE_SPRING } from "@/components/ui/MotionProvider";
 import { Tabs } from "@/components/ui/Tabs";
-import { firstPageFor, homeFor, logIn, signUp } from "@/lib/api/auth";
+import { firstPageFor, homeFor, logIn, signUp, takeReturnPath } from "@/lib/api/auth";
 import { cx } from "@/lib/format";
 import type { Role } from "@/lib/types";
 
@@ -51,14 +51,20 @@ function validate(mode: Mode, f: Form): Errors {
   return e;
 }
 
+/** The card with the tab asked for in the address: /login?mode=login opens "Log in" (used by QR and feedback links). */
+export function AuthCardFromUrl() {
+  const mode = useSearchParams().get("mode") === "login" ? "login" : "signup";
+  return <AuthCard key={mode} initialMode={mode} />;
+}
+
 /**
  * Log in / Sign up card (wireframe 09a), connected to the backend (src/lib/api/auth.ts).
  * Volunteers and NGO Administrators sign up with the same fields; only the role differs.
  * When logging in, the account's own role decides where the user lands.
  */
-export function AuthCard() {
+export function AuthCard({ initialMode = "signup" }: { initialMode?: Mode }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("signup");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [role, setRole] = useState<Role>("volunteer");
   const [form, setForm] = useState<Form>({ fullName: "", email: "", password: "", confirm: "", terms: false });
   const [errors, setErrors] = useState<Errors>({});
@@ -101,7 +107,9 @@ export function AuthCard() {
     }
     // Keep the button spinning while the next page loads.
     // New accounts go on to create their profile; returning users land on their dashboard.
-    router.push(mode === "signup" ? firstPageFor(role) : homeFor(result.user.role));
+    // A volunteer who opened a QR or feedback link while signed out continues on that page.
+    const returnTo = result.user.role === "volunteer" ? takeReturnPath() : null;
+    router.push(mode === "signup" ? firstPageFor(role) : (returnTo ?? homeFor(result.user.role)));
   };
 
   return (

@@ -13,9 +13,11 @@ still needs to add. Endpoints are listed in `backend/README.md`.
 | Project details, edit project / continue draft, publish / complete / cancel, assign coordinator | `src/lib/api/projects.ts`, `ngo.ts` | ✅ Connected |
 | Application review (approve / reject + search & filter), Team (add / remove coordinators) | `src/lib/api/projects.ts` | ✅ Connected — volunteers show as **"Volunteer #ID"** until the backend sends names (section 4) |
 | Coordinator My projects, project details, Applications | `src/lib/api/projects.ts` | ✅ Connected |
-| Admin panel: Organisations (list, approve / reject / suspend, stats), Users (every account, suspend / reactivate, send password reset) | `src/lib/api/admin.ts` | ✅ Connected — invite user, change role, last login and audit log show **"Coming soon"** (section 4) |
+| Admin panel: Organisations (list, approve / reject / suspend, stats), Users (every account, suspend / reactivate, send password reset), Audit log | `src/lib/api/admin.ts` | ✅ Connected — invite user, change role and last login show **"Coming soon"** (section 4) |
 | Password reset (forgot password → email link → new password, expired-link screen) | `src/lib/api/auth.ts`, `components/auth/PasswordReset.tsx` | ✅ Connected — with `EMAIL_BACKEND=log` the link is printed in the backend terminal instead of emailed |
-| Coordinator attendance / QR check-in | `src/lib/api/coordinator.ts` | ❌ Sample data (`src/lib/fake/coordinatorFake.ts`); the page says "Preview with sample data" |
+| QR check-in / check-out, coordinator attendance | `src/lib/api/attendance.ts` | ✅ Connected — the camera needs HTTPS (or localhost) |
+| Volunteer feedback, coordinator feedback results | `src/lib/api/feedback.ts` | ✅ Connected |
+| Volunteer hours review on project details | `src/lib/api/contributions.ts` | ✅ Connected |
 
 Search the code for `NotSavedHint`, `ComingSoonCard`, `TODO(backend)` and `TODO(frontend)` to find every
 open item.
@@ -35,9 +37,10 @@ src/
 │  │  ├─ volunteer.ts    ← volunteer pages
 │  │  ├─ ngo.ts          ← NGO Administrator pages: profile, projects list, create / edit, dashboard (section 3)
 │  │  ├─ projects.ts     ← shared by NGO admins and coordinators: project details, applications, team (section 3)
-│  │  ├─ admin.ts        ← System Administrator pages (admin panel, section 3)
-│  │  └─ coordinator.ts  ← Project Coordinator attendance (still sample data)
-│  └─ fake/              ← sample data still in use: coordinatorFake.ts only
+│  │  ├─ admin.ts        ← System Administrator pages (admin panel, audit log, section 3)
+│  │  ├─ attendance.ts   ← QR check-in / check-out and the coordinator's attendance board
+│  │  ├─ feedback.ts     ← volunteer feedback and coordinator results
+│  │  └─ contributions.ts ← staff review of volunteer hours
 ├─ app/                  ← pages (routes): volunteer pages, /ngo/..., /coordinator/...
 └─ components/           ← UI pieces (volunteer/, ngo/, coordinator/, staff/ for the staff page frame)
 ```
@@ -85,9 +88,12 @@ Connected by the backend team (see the comments in that file). Gaps found while 
   `PUT /me/profile`, so they are empty again after saving.
 - Profile → **State**: when the saved state is empty the dropdown shows the first option ("Selangor")
   although nothing is selected, so saving keeps it empty (frontend: add a "Select a state" placeholder).
-- Placeholder buttons (show a notice only): Dashboard **Check in (QR)** and My activities **Scan to check
-  in** (no attendance API), **Download summary**, certificate **Download**, certificate **Generate**
-  (`TODO(backend)` in `components/volunteer/Dashboard.tsx`).
+- Placeholder buttons (show a notice only): **Download summary**, certificate **Download**, certificate
+  **Generate** (`TODO(backend)` in `components/volunteer/Dashboard.tsx`).
+- `/check-in` scans the coordinator's QR (`POST /attendance/scan`): the first scan checks in, the second checks out.
+  The QR holds `FRONTEND_URL/check-in?token=...`, so the backend's `FRONTEND_URL` must be the deployed site. The token
+  is long and random, so there is no manual code entry. A signed-out volunteer returns to the link after logging in.
+- `/feedback/[eventId]` is the page linked from the thank-you email. Only volunteers who checked in can submit, once.
 
 ## 3. NGO Administrator pages (`src/lib/api/ngo.ts`)
 
@@ -109,6 +115,10 @@ Connected by the backend team (see the comments in that file). Gaps found while 
 | `/coordinator/projects` | `GET /me/coordinated-projects` (published ones) + events |
 | `/coordinator/projects/[id]` | Same as `/ngo/projects/[id]`; review applications, complete or cancel |
 | `/coordinator/applications` | Applications to every coordinated project, with search and filters |
+| `/coordinator/attendance` | `GET /events/{id}/qr` (re-read every 30 s), `POST /events/{id}/qr` (Refresh now), `GET /events/{id}/attendance` (every 10 s), `PUT /events/{id}/attendance/{user_id}` (manual check-in, correct times, mark absent), `PATCH /events/{id}` `completed` (Close event) |
+| `/coordinator/feedback` | `GET /events/{id}/feedback` for the chosen session: average, star counts and comments |
+
+Project details (NGO and coordinator) also list volunteer hours: `GET /projects/{id}/contributions`, **Verify** / **Reject** → `PATCH /contributions/{id}`.
 
 Behaviour worth knowing:
 
@@ -134,6 +144,7 @@ Behaviour worth knowing:
 | --- | --- |
 | `/admin/organisations` | `GET /ngos` (every organisation for a platform admin), `GET /projects` (project counts, active projects), `GET /ngos/{id}/members` (NGO administrator), `GET /ngos/{id}/dashboard` (volunteers, hours this month); **Approve** → `PATCH /ngos/{id}/status` `active`, **Reject** / **Suspend** → `suspended`, **Reactivate** → `active` |
 | `/admin/users` | `GET /users?limit=500` (every account with `roles[]`, `organisations[]`, `account_status`, `created_at`); search and filters run in the browser; **Suspend user** / **Reactivate user** → `PATCH /users/{id}/status` (not offered on your own account); **Send password reset** → `POST /auth/password-reset` with that user's email; **Export CSV** builds the file in the browser |
+| `/admin/audit-log` | `GET /audit-logs` (25 per page, filter by activity and user), `GET /users` for names. Read-only |
 
 ## 4. What the backend still needs
 
@@ -163,9 +174,10 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
 - A per-session roster (`GET /events/{id}/registrations`, with names) — also needed for attendance.
 
 **Multi-date projects**
-- `GET /opportunities` and `GET /opportunities/{id}` return only the **next** active event, so a volunteer can
-  register for one date at a time. To let volunteers choose among all dates, the response needs every upcoming
-  event, and the volunteer detail page needs a date picker.
+- `GET /opportunities` and `GET /opportunities/{id}` return only the **next** active event. The volunteer detail
+  page therefore reads every date from `GET /projects/{id}/events` and `GET /me/registrations`, and registers or
+  cancels per date. No backend change is required. Returning all events in `/opportunities` would let the browse
+  list show every date without an extra request per project.
 
 **NGO dashboard (`NgoDashboardOut`)**
 - Active / new / returning volunteer counts
@@ -174,18 +186,11 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
   requested skills, AI insights
 - Export report
 
-**Project Coordinator**
-- Attendance and QR check-in: event roster, check-in / check-out, rotating signed QR token, manual
-  check-in, close event (`TODO(backend)` in `components/coordinator/AttendanceBoard.tsx`).
-  Replace `components/coordinator/FakeQr.tsx` with a real QR library once tokens exist.
-
 **Admin panel (wireframe 16)**
 - Last login time in `GET /users` (the details panel shows "Not available yet").
 - Invite a user, and change a user's role from the panel (`PATCH /auth/users/{id}/system-role` only
   promotes / demotes platform admins).
 - `GET /users` returns at most 500 accounts per call; add paging in the UI if the platform grows past that.
-- Audit log: the `audit_log` table is in `schema.sql` but nothing writes to it and there is no read API
-  (needed for the Audit log card / page and "Export log").
 - Overview page: no wireframe yet (greyed out as "Soon").
 
 **Other**
@@ -199,8 +204,8 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
 - Project details, Volunteers and Team pages have no wireframe yet; they follow the style of the other
   NGO pages. Update them when the wireframes exist.
 - Nav links still without a page are greyed out as "Soon": AI recommendations, Reports, coordinator
-  Dashboard and Feedback, admin Overview and Audit log. The certificate page (16a) and AI recommendation
-  review (16b) are not started.
+  Dashboard and admin Overview. The notification bell, certificate page (16a) and AI recommendation review
+  (16b) are not started.
 - Admin "Change role" and "Invite user" only show a notice until the backend has those APIs.
 
 ## 6. Running and deploying
@@ -226,7 +231,7 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
 - [x] Project details, application review, team and coordinator pages use the backend
 - [ ] Backend sends volunteer name, email, skills and applied_at with applications (section 4)
 - [ ] Backend adds the fields in section 4, frontend removes the matching `NotSavedHint` / `ComingSoonCard`
-- [ ] Attendance / QR API, then `coordinator.ts` calls it and `src/lib/fake/` is deleted
+- [x] Attendance / QR API connected and the sample data deleted
 - [ ] `BACKEND_URL` set on Vercel, backend `JWT_SECRET` set
 - [ ] Searching for `Fake`, `TODO(backend)` and `TODO(frontend)` returns nothing
 - [x] `npm run lint` and `npm run build` pass

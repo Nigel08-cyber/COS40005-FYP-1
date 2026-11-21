@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Badge, SkillTag } from "@/components/ui/Badge";
 import { Card, CardTitle, Placeholder } from "@/components/ui/Card";
+import { ActivityDates } from "@/components/volunteer/ActivityDates";
 import { DataView } from "@/components/volunteer/DataView";
 import { DetailSidebar } from "@/components/volunteer/DetailSidebar";
 import { getOpportunity } from "@/lib/api/volunteer";
@@ -61,6 +62,8 @@ function Detail({ o }: { o: NonNullable<Awaited<ReturnType<typeof getOpportunity
               ))}
             </ul>
           </Card>
+
+          {o.sessions && o.sessions.length > 1 && <ActivityDates opportunity={o} />}
 
           <Card className="p-5">
             <CardTitle>Requirements</CardTitle>

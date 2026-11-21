@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { formatLongDate, formatTimeRange } from "@/lib/format";
+import { formatLongDate, formatShortDate, formatTimeRange } from "@/lib/format";
 import { downloadIcs } from "@/lib/ics";
 import type { Opportunity } from "@/lib/types";
 import { PrimaryAction, StatusBadge } from "./OpportunityStatus";
@@ -17,34 +17,53 @@ export function DetailSidebar({ opportunity: o }: { opportunity: Opportunity }) 
   const registered = registeredCount(o);
   const left = Math.max(0, o.volunteersNeeded - registered);
   const status = statusOf(o.id);
+  // Several dates: spots and registration are per date, in the "Activity dates" card
+  const dates = o.sessions ?? [];
+  const multiple = dates.length > 1;
+  const canChoose = status === "approved" || status === "registered" || status === "waitlisted";
 
   return (
     <aside className="space-y-4">
       <Card className="p-5">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold">{formatLongDate(o.start)}</p>
+          <p className="font-semibold">{multiple ? `${dates.length} dates` : formatLongDate(o.start)}</p>
           <StatusBadge opportunity={o} />
         </div>
         <p className="mt-0.5 text-xs text-muted">
-          {formatTimeRange(o.start, o.end)} · {o.area}
+          {multiple
+            ? `${formatShortDate(dates[0].start)} – ${formatShortDate(dates.at(-1)!.start)}`
+            : formatTimeRange(o.start, o.end)}{" "}
+          · {o.area}
         </p>
 
-        <div className="mb-1.5 mt-4 flex justify-between text-xs">
-          <span className="font-medium">Spots filled</span>
-          <span className="text-muted">
-            {registered}/{o.volunteersNeeded} volunteers
-          </span>
-        </div>
-        <ProgressBar value={registered} max={o.volunteersNeeded} />
-        <p className={left > 0 ? "mt-1.5 text-xs text-success" : "mt-1.5 text-xs text-danger"}>
-          {left > 0 ? `${left} ${left === 1 ? "spot" : "spots"} left` : "No spots left"}
-        </p>
+        {!multiple && (
+          <>
+            <div className="mb-1.5 mt-4 flex justify-between text-xs">
+              <span className="font-medium">Spots filled</span>
+              <span className="text-muted">
+                {registered}/{o.volunteersNeeded} volunteers
+              </span>
+            </div>
+            <ProgressBar value={registered} max={o.volunteersNeeded} />
+            <p className={left > 0 ? "mt-1.5 text-xs text-success" : "mt-1.5 text-xs text-danger"}>
+              {left > 0 ? `${left} ${left === 1 ? "spot" : "spots"} left` : "No spots left"}
+            </p>
+          </>
+        )}
 
         <div className="mt-4 space-y-2">
-          <PrimaryAction opportunity={o} size="lg" wording="long" />
-          <Button variant="outline" size="lg" className="w-full" onClick={() => downloadIcs(o)}>
-            Add to calendar (.ics)
-          </Button>
+          {multiple && canChoose ? (
+            <Button href="#activity-dates" variant="brand" size="lg" className="w-full">
+              Choose your dates
+            </Button>
+          ) : (
+            <PrimaryAction opportunity={o} size="lg" wording="long" />
+          )}
+          {!multiple && (
+            <Button variant="outline" size="lg" className="w-full" onClick={() => downloadIcs(o)}>
+              Add to calendar (.ics)
+            </Button>
+          )}
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-muted">
           Your application is reviewed by the project coordinator. Once approved you can register for the event.

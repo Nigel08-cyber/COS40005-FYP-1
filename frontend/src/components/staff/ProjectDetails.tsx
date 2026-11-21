@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/Fields";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ApplicationReview } from "@/components/staff/ApplicationReview";
 import { ConfirmButton } from "@/components/staff/ConfirmButton";
+import { ContributionReview } from "@/components/staff/ContributionReview";
 import { ApprovalBanner } from "@/components/staff/StaffNotices";
 import { useStaff } from "@/components/staff/StaffShell";
 import { errorMessage } from "@/lib/api/http";
@@ -57,6 +58,13 @@ export function ProjectDetails({ data }: { data: ProjectDetailData }) {
   const open = status === "active";
   const orgActive = data.ngoStatus === "active";
   const [approved, setApproved] = useState(data.applications.filter((a) => a.status === "approved").length);
+  // One line per date; two time slots on the same day count as one date.
+  const sessionDates = [...new Set(sessions.filter((s) => s.status !== "cancelled").map((s) => s.start.slice(0, 10)))];
+  const dateText = sessionDates.length
+    ? sessionDates.map(formatLongDate).join("\n")
+    : project.date
+      ? formatLongDate(project.date)
+      : "Not set";
   const coordinatorName =
     data.coordinators.find((c) => c.id === coordinatorId)?.name.replace(/ \(admin\)$/, "") ?? (coordinatorId ? project.coordinator : "Not assigned");
 
@@ -193,13 +201,15 @@ export function ProjectDetails({ data }: { data: ProjectDetailData }) {
               />
             )}
           </Card>
+
+          {status !== "draft" && <ContributionReview projectId={project.id} />}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:h-fit">
           <Card className="p-5">
             <CardTitle>Details</CardTitle>
             <dl className="mt-3 divide-y divide-line text-sm">
-              <Row label="Date" value={project.date ? formatLongDate(project.date) : "Not set"} />
+              <Row label={sessionDates.length > 1 ? "Dates" : "Date"} value={dateText} />
               <Row label="Location" value={project.location || "Not set"} />
               <div className="py-2.5">
                 <dt className="text-xs text-muted">Coordinator</dt>
@@ -260,7 +270,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 py-2.5">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="text-right text-xs font-medium text-ink">{value}</dd>
+      <dd className="whitespace-pre-line text-right text-xs font-medium leading-relaxed text-ink">{value}</dd>
     </div>
   );
 }

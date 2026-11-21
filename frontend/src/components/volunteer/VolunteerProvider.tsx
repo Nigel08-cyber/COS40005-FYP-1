@@ -1,13 +1,17 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PageSkeleton } from "@/components/volunteer/DataView";
 import {
   applyToProject,
+  cancelDate,
   cancelRegistration,
+  countUpcomingDates,
   getMyApplications,
+  registerForDate,
   registerForOpportunity,
   withdrawApplication,
 } from "@/lib/api/volunteer";
@@ -35,6 +39,13 @@ interface VolunteerContextValue {
   volunteer: Volunteer;
   statusOf: (opportunityId: string) => ApplicationStatus;
   act: (opportunityId: string, action: Action) => void;
+  /** Registers for, or cancels, one date. Resolves to the new status for that date, or undefined if it failed. */
+  actOnDate: (
+    opportunityId: string,
+    eventId: number,
+    action: "register" | "cancel",
+    wasWaitlisted?: boolean,
+  ) => Promise<"registered" | "waitlisted" | null | undefined>;
   /** Registered volunteers including the signed-in volunteer, if registered. */
   registeredCount: (opportunity: Opportunity) => number;
   notify: (message: string) => void;
@@ -75,6 +86,7 @@ export function VolunteerGate({ children }: { children: React.ReactNode }) {
 export function VolunteerProvider({ children }: { children: React.ReactNode }) {
   // Login check: signed-out visitors go to /login, other roles to their own pages
   const sessionUser = useSessionGuard(["volunteer"]);
+  const router = useRouter();
   const [statuses, setStatuses] = useState<Record<string, ApplicationStatus> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -117,6 +129,12 @@ export function VolunteerProvider({ children }: { children: React.ReactNode }) {
       if (busy.current.has(id)) return; // ignore double clicks while a request is running
       busy.current.add(id);
       try {
+        // A project with several dates: the volunteer chooses the date on its activity page
+        if ((action === "register" || action === "cancel" || action === "leaveWaitlist") && (await countUpcomingDates(id)) > 1) {
+          router.push(`/opportunities/${id}#activity-dates`);
+          notify("This activity has several dates. Choose one here.");
+          return;
+        }
         let next: ApplicationStatus;
         let message = toastText[action];
         if (action === "apply") {
@@ -141,6 +159,33 @@ export function VolunteerProvider({ children }: { children: React.ReactNode }) {
         busy.current.delete(id);
       }
     },
+    [notify, router],
+  );
+
+  const actOnDate = useCallback<VolunteerContextValue["actOnDate"]>(
+    async (id, eventId, action, wasWaitlisted = false) => {
+      if (busy.current.has(id)) return undefined;
+      busy.current.add(id);
+      try {
+        let result: "registered" | "waitlisted" | null = null;
+        if (action === "register") {
+          result = await registerForDate(eventId);
+          notify(result === "waitlisted" ? toastText.joinWaitlist : toastText.register);
+        } else {
+          await cancelDate(eventId);
+          notify(wasWaitlisted ? toastText.leaveWaitlist : toastText.cancel);
+        }
+        // The project's status depends on all its dates, so read it back from the server
+        const apps = await getMyApplications().catch(() => null);
+        if (apps) setStatuses(Object.fromEntries(apps.map((a) => [a.opportunityId, a.status])));
+        return result;
+      } catch (e) {
+        notify(errorMessage(e));
+        return undefined;
+      } finally {
+        busy.current.delete(id);
+      }
+    },
     [notify],
   );
 
@@ -149,6 +194,7 @@ export function VolunteerProvider({ children }: { children: React.ReactNode }) {
       volunteer: shownVolunteer,
       statusOf: (id) => statuses?.[id] ?? "none",
       act: (id, action) => void act(id, action),
+      actOnDate,
       registeredCount: (o) => o.volunteersRegisteredOthers + (statuses?.[o.id] === "registered" ? 1 : 0),
       notify,
       state: {
@@ -160,7 +206,7 @@ export function VolunteerProvider({ children }: { children: React.ReactNode }) {
         },
       },
     }),
-    [shownVolunteer, statuses, act, notify, sessionUser, loadError],
+    [shownVolunteer, statuses, act, actOnDate, notify, sessionUser, loadError],
   );
 
   return (

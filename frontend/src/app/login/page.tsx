@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { AuthCard } from "@/components/auth/AuthCard";
+import { Suspense } from "react";
+import { AuthCard, AuthCardFromUrl } from "@/components/auth/AuthCard";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 
 export const metadata: Metadata = { title: "Log in · VolunteerHub" };
@@ -13,7 +14,10 @@ const highlights = [
 export default function LoginPage() {
   return (
     <AuthLayout highlights={highlights} backToCover>
-      <AuthCard />
+      {/* ?mode=login is read in the browser */}
+      <Suspense fallback={<AuthCard />}>
+        <AuthCardFromUrl />
+      </Suspense>
     </AuthLayout>
   );
 }

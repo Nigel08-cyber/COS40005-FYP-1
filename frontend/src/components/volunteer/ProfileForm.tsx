@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { FileField } from "@/components/staff/FormParts";
 import { AnimatedHeight } from "@/components/ui/AnimatedHeight";
 import { Badge, SkillTag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -83,11 +84,20 @@ export function ProfileForm({
   const set = <K extends keyof VolunteerProfile>(key: K, value: VolunteerProfile[K]) =>
     setProfile((p) => ({ ...p, [key]: value }));
   const toggleIn = (key: ListKey, item: string) => setProfile((p) => ({ ...p, [key]: toggle(p[key], item) }));
-  const addOwn = (key: ListKey, item: string) => {
+  // Items the volunteer added (this session or saved earlier); the default options can never be removed.
+  const customItems = (key: ListKey) =>
+    [...new Set([...extra[key], ...profile[key]])].filter((item) => !options[key].includes(item));
+  const addOwn = (key: ListKey, typed: string) => {
+    const lower = typed.toLowerCase();
+    const item = [...options[key], ...customItems(key)].find((x) => x.toLowerCase() === lower) ?? typed;
     if (!options[key].includes(item) && !extra[key].includes(item)) {
       setExtra((e) => ({ ...e, [key]: [...e[key], item] }));
     }
     setProfile((p) => (p[key].includes(item) ? p : { ...p, [key]: [...p[key], item] }));
+  };
+  const removeOwn = (key: ListKey, item: string) => {
+    setExtra((e) => ({ ...e, [key]: e[key].filter((x) => x !== item) }));
+    setProfile((p) => ({ ...p, [key]: p[key].filter((x) => x !== item) }));
   };
 
   const startEditing = () => {
@@ -101,6 +111,7 @@ export function ProfileForm({
       const result = await saveVolunteerProfile(profile);
       setProfile(result.profile);
       setSaved(result.profile);
+      setExtra({ skills: [], languages: [], interests: [] });
       setEditing(false);
       notify(
         result.skipped.length
@@ -116,6 +127,7 @@ export function ProfileForm({
 
   const cancel = () => {
     setProfile(saved);
+    setExtra({ skills: [], languages: [], interests: [] });
     setEditing(false);
     if (dirty) notify("Changes discarded.");
   };
@@ -187,7 +199,13 @@ export function ProfileForm({
                     value={profile.phone}
                     onChange={(v) => set("phone", v)}
                   />
-                  <PhotoField fileName={profile.photoName} onChange={(name) => set("photoName", name)} />
+                  <FileField
+                    label="Profile photo"
+                    placeholder="Upload image"
+                    accept="image/*"
+                    fileName={profile.photoName}
+                    onChange={(name) => set("photoName", name)}
+                  />
                 </>
               ) : (
                 <>
@@ -208,11 +226,13 @@ export function ProfileForm({
             {editing ? (
               <>
                 <ChipGroup
-                  items={[...options.skills, ...extra.skills]}
+                  items={[...options.skills, ...customItems("skills")]}
                   selected={profile.skills}
                   onToggle={(s) => toggleIn("skills", s)}
                   addLabel="Add skill"
                   onAdd={(s) => addOwn("skills", s)}
+                  removable={customItems("skills")}
+                  onRemove={(s) => removeOwn("skills", s)}
                 />
                 <div className="mt-4">
                   <TextField
@@ -244,11 +264,13 @@ export function ProfileForm({
           <Section title="3. Languages" editing={editing}>
             {editing ? (
               <ChipGroup
-                items={[...options.languages, ...extra.languages]}
+                items={[...options.languages, ...customItems("languages")]}
                 selected={profile.languages}
                 onToggle={(l) => toggleIn("languages", l)}
                 addLabel="Add language"
                 onAdd={(l) => addOwn("languages", l)}
+                removable={customItems("languages")}
+                onRemove={(l) => removeOwn("languages", l)}
               />
             ) : (
               <SelectedTags items={profile.languages} empty="No languages added yet" />
@@ -515,45 +537,23 @@ function LabeledSelect({
   );
 }
 
-/** Upload box. Only the file name is kept for now — uploading needs the backend. */
-function PhotoField({ fileName, onChange }: { fileName: string; onChange: (name: string) => void }) {
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div>
-      <p className="mb-1.5 text-xs font-medium">Profile photo</p>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        className="sr-only"
-        onChange={(e) => onChange(e.target.files?.[0]?.name ?? "")}
-      />
-      <button
-        type="button"
-        onClick={() => input.current?.click()}
-        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface px-3 text-left text-sm hover:border-ink/30 hover:bg-canvas"
-      >
-        <span className={cx("truncate", fileName ? "text-ink" : "text-faint")}>{fileName || "Upload image"}</span>
-        <svg viewBox="0 0 16 16" fill="none" className="size-4 shrink-0 text-muted" aria-hidden>
-          <path d="M8 11V3M5 6l3-3 3 3M3 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
 function ChipGroup({
   items,
   selected,
   onToggle,
   addLabel,
   onAdd,
+  removable = [],
+  onRemove,
 }: {
   items: string[];
   selected: string[];
   onToggle: (item: string) => void;
   addLabel?: string;
   onAdd?: (item: string) => void;
+  /** Items the volunteer added; the default options are never listed here */
+  removable?: string[];
+  onRemove?: (item: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -568,11 +568,37 @@ function ChipGroup({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <AnimatePresence initial={false}>
-        {items.map((item) => (
-          <motion.span key={item} layout initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-            <Chip label={item} active={selected.includes(item)} onToggle={() => onToggle(item)} />
-          </motion.span>
-        ))}
+        {items.map((item) => {
+          const canRemove = !!onRemove && removable.includes(item);
+          return (
+            <motion.span
+              key={item}
+              layout
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.15 } }}
+              className="relative inline-flex"
+            >
+              <Chip
+                label={item}
+                active={selected.includes(item)}
+                onToggle={() => onToggle(item)}
+                className={canRemove ? "pr-6" : undefined}
+              />
+              {canRemove && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${item}`}
+                  title={`Remove ${item}`}
+                  onClick={() => onRemove(item)}
+                  className="absolute right-1 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full text-current hover:bg-danger hover:text-white focus-visible:bg-danger focus-visible:text-white focus-visible:outline-none"
+                >
+                  ×
+                </button>
+              )}
+            </motion.span>
+          );
+        })}
       </AnimatePresence>
       {addLabel && onAdd && (
         <motion.span layout>

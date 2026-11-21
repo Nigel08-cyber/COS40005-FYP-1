@@ -34,7 +34,7 @@ export function MyActivities({
   today: string;
 }) {
   const [tab, setTab] = useState<Tab>("upcoming");
-  const { statusOf, notify } = useVolunteer();
+  const { statusOf } = useVolunteer();
 
   const byDate = [...opportunities].sort((a, b) => a.start.localeCompare(b.start));
   const upcoming = byDate.filter((o) => ["registered", "approved"].includes(statusOf(o.id)));
@@ -62,7 +62,7 @@ export function MyActivities({
                 </Button>
               )}
               {canCheckIn && (
-                <Button variant="brand" onClick={() => notify("QR check-in will be added in a later sprint.")}>
+                <Button href={o.eventId ? `/check-in?event=${o.eventId}` : "/check-in"} variant="brand">
                   Scan to check in
                 </Button>
               )}
@@ -116,10 +116,17 @@ export function MyActivities({
                     meta={`${formatLongDate(p.date)} · ${p.area}`}
                     badge={<Badge tone="success">Completed</Badge>}
                     actions={
-                      <div className="text-right text-sm">
-                        <p className="font-semibold">{p.hours} hours</p>
-                        <p className="text-xs text-muted">{p.role}</p>
-                      </div>
+                      <>
+                        <div className="text-right text-sm">
+                          <p className="font-semibold">{p.hours} hours</p>
+                          <p className="text-xs text-muted">{p.role}</p>
+                        </div>
+                        {p.needsFeedback && (
+                          <Button href={`/feedback/${p.id}`} variant="brand">
+                            Give feedback
+                          </Button>
+                        )}
+                      </>
                     }
                   />
                 </AnimatedItem>

@@ -13,7 +13,7 @@ const sideLinks: StaffLink[] = [
   { label: "My projects", href: "/coordinator/projects" },
   { label: "Applications", href: "/coordinator/applications" },
   { label: "Attendance", href: "/coordinator/attendance" },
-  { label: "Feedback" },
+  { label: "Feedback", href: "/coordinator/feedback" },
 ];
 
 export default function CoordinatorLayout({ children }: { children: React.ReactNode }) {

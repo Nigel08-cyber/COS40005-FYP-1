@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import type { PendingFeedback } from "@/lib/api/feedback";
 import { cx, daysBetween, formatShortDate, formatTime } from "@/lib/format";
 import type { Certificate, ContributionRecord, MonthlyHours, Opportunity } from "@/lib/types";
 import { CHECK_IN_WINDOW_DAYS } from "./MyActivities";
@@ -24,9 +25,10 @@ export function WelcomeHeader() {
 
 const UPCOMING_LIMIT = 2;
 const RECOMMENDED_LIMIT = 2;
+const RATE_LIMIT = 3;
 
 export function UpcomingCard({ opportunities, today }: { opportunities: Opportunity[]; today: string }) {
-  const { statusOf, notify } = useVolunteer();
+  const { statusOf } = useVolunteer();
   const upcoming = opportunities
     .filter((o) => statusOf(o.id) === "registered")
     .sort((a, b) => a.start.localeCompare(b.start))
@@ -59,7 +61,7 @@ export function UpcomingCard({ opportunities, today }: { opportunities: Opportun
                   </p>
                 </div>
                 {canCheckIn ? (
-                  <Button variant="brand" onClick={() => notify("QR check-in will be added in a later sprint.")}>
+                  <Button href={o.eventId ? `/check-in?event=${o.eventId}` : "/check-in"} variant="brand">
                     Check in (QR)
                   </Button>
                 ) : (
@@ -174,6 +176,30 @@ export function HoursChart({ data }: { data: MonthlyHours[] }) {
           </span>
         ))}
       </div>
+    </Card>
+  );
+}
+
+/** Activities the volunteer attended and has not rated yet. Hidden when there is nothing to rate. */
+export function RateEventsCard({ events }: { events: PendingFeedback[] }) {
+  if (events.length === 0) return null;
+  return (
+    <Card className="p-5">
+      <CardTitle>Rate your activities</CardTitle>
+      <p className="text-xs text-muted">Your feedback helps organisers improve.</p>
+      <ul className="mt-3 divide-y divide-line">
+        {events.slice(0, RATE_LIMIT).map((e) => (
+          <li key={e.eventId} className="flex items-center justify-between gap-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{e.title}</p>
+              <p className="text-xs text-muted">{formatShortDate(e.end)}</p>
+            </div>
+            <Button href={`/feedback/${e.eventId}`} variant="brand" size="sm">
+              Rate
+            </Button>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }

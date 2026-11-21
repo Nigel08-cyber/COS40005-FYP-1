@@ -6,7 +6,7 @@
   Fields the backend does not store yet are kept in the forms and marked "Not saved yet"
   (see BACKEND_INTEGRATION.md, section 4).
 */
-import { ApiError, api, shortDay, todayInMalaysia, utcToLocal } from "@/lib/api/http";
+import { ApiError, api, localToUtc, shortDay, todayInMalaysia, utcToLocal } from "@/lib/api/http";
 import {
   type ProjectApi,
   categoryLabel,
@@ -67,12 +67,6 @@ const joinList = (items: string[]) => (items.length ? items.join(", ") : null);
 const orNull = (s: string) => (s.trim() ? s.trim() : null);
 
 const categoryCode = (label: string) => CATEGORIES.find((c) => c.label === label)?.code ?? null;
-
-/** Malaysia local "YYYY-MM-DD" + "HH:mm" -> naive UTC "YYYY-MM-DDTHH:mm:00" (what the backend stores). */
-function localToUtc(date: string, hhmm: string) {
-  const utc = new Date(`${date}T${hhmm}:00+08:00`);
-  return utc.toISOString().slice(0, 19);
-}
 
 /** Name of the signed-in user's organisation ("" when none) — for the nav bar user menu. */
 export async function getMyOrganisationName() {

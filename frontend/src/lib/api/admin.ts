@@ -3,7 +3,7 @@
   What the backend offers today: every organisation (GET /ngos as a platform admin), approve / suspend
   (PATCH /ngos/{id}/status), each organisation's members and dashboard, and all projects.
   Users page: GET /users (every account with roles and organisations) and PATCH /users/{id}/status.
-  Still missing: invite user, change role, last login and the audit log — those say "Coming soon"
+  Audit log: GET /audit-logs. Still missing: invite user, change role and last login, which say "Coming soon"
   (see BACKEND_INTEGRATION.md, section 4).
 */
 import { restoreSession } from "@/lib/api/auth";
@@ -119,4 +119,96 @@ export async function getAdminUsers(): Promise<AdminUsersData> {
 export async function setUserStatus(userId: number, status: "active" | "suspended") {
   const me = await restoreSession();
   return toAdminUser(await api<AdminUserApi>(`/users/${userId}/status`, { method: "PATCH", json: { account_status: status } }), me?.id);
+}
+
+/* ---------------- audit log (GET /audit-logs) ---------------- */
+
+export interface AuditEntry {
+  log_id: number;
+  user_id: number | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: number | null;
+  details: { status?: number; path?: string; hours?: number | null } | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface AuditPeople {
+  names: Record<number, string>;
+  options: { value: string; label: string }[];
+}
+
+const AUDIT_PAGE_SIZE = 25;
+
+/** Readable names for the backend's action codes. Anything not listed shows its technical name. */
+const AUDIT_LABELS: Record<string, string> = {
+  "POST /auth/login": "Logged in",
+  "POST /auth/logout": "Logged out",
+  "POST /auth/register": "Created an account",
+  "POST /auth/password-reset": "Requested a password reset",
+  "POST /auth/password-reset/confirm": "Changed password by reset link",
+  "PATCH /auth/users/{user_id}/system-role": "Changed a system role",
+  "PATCH /users/{user_id}/status": "Changed a user's status",
+  "POST /ngos": "Created an organisation",
+  "PATCH /ngos/{ngo_id}": "Edited an organisation",
+  "PATCH /ngos/{ngo_id}/status": "Changed an organisation's status",
+  "POST /ngos/{ngo_id}/members": "Added a team member",
+  "DELETE /ngos/{ngo_id}/members/{user_id}": "Removed a team member",
+  "POST /projects": "Created a project",
+  "PATCH /projects/{project_id}": "Edited a project",
+  "PATCH /projects/{project_id}/status": "Changed a project's status",
+  "PUT /projects/{project_id}/coordinator": "Assigned a coordinator",
+  "PUT /projects/{project_id}/skills": "Changed required skills",
+  "POST /projects/{project_id}/events": "Added a session",
+  "PATCH /events/{event_id}": "Edited a session",
+  "POST /projects/{project_id}/applications": "Applied to a project",
+  "DELETE /projects/{project_id}/applications/me": "Withdrew an application",
+  "PATCH /applications/{application_id}": "Reviewed an application",
+  "POST /events/{event_id}/registrations": "Registered for a session",
+  "DELETE /events/{event_id}/registrations/me": "Cancelled a registration",
+  "POST /events/{event_id}/qr": "Refreshed a QR code",
+  "POST /attendance/scan": "Scanned a QR code",
+  "PUT /events/{event_id}/attendance/{user_id}": "Corrected attendance",
+  "POST /events/{event_id}/feedback": "Submitted feedback",
+  "PATCH /contributions/{contribution_id}": "Reviewed volunteer hours",
+  "PUT /me/profile": "Updated their profile",
+  "POST /skills": "Added a skill",
+  "attendance.checked_in": "Checked in",
+  "attendance.checked_out": "Checked out",
+  "attendance.corrected": "Attendance corrected",
+  "contribution.status": "Volunteer hours status changed",
+};
+
+export const auditActionLabel = (action: string) => AUDIT_LABELS[action] ?? action;
+
+/** The backend matches the start of the action code. */
+export const AUDIT_FILTERS = [
+  { value: "POST /auth/login", label: "Logins" },
+  { value: "POST /auth/register", label: "New accounts" },
+  { value: "POST /auth/password-reset", label: "Password resets" },
+  { value: "PATCH /users/", label: "User status changes" },
+  { value: "PATCH /ngos/", label: "Organisation changes" },
+  { value: "PATCH /projects/", label: "Project changes" },
+  { value: "PATCH /applications/", label: "Application reviews" },
+  { value: "attendance.", label: "Attendance" },
+  { value: "contribution.", label: "Volunteer hours" },
+];
+
+/** Names for the "who" column and the user filter. */
+export async function getAuditPeople(): Promise<AuditPeople> {
+  const rows = await api<AdminUserApi[]>(`/users?limit=${USERS_LIMIT}`);
+  return {
+    names: Object.fromEntries(rows.map((u) => [u.user_id, u.full_name])),
+    options: rows.map((u) => ({ value: String(u.user_id), label: `${u.full_name} (${u.email})` })),
+  };
+}
+
+/** One page, newest first. Asks for one extra row to know whether an older page exists. */
+export async function getAuditPage({ action, userId, page }: { action: string; userId: number | null; page: number }) {
+  const query = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE + 1), offset: String(page * AUDIT_PAGE_SIZE) });
+  if (action) query.set("action", action);
+  if (userId !== null) query.set("user_id", String(userId));
+  const rows = await api<AuditEntry[]>(`/audit-logs?${query}`);
+  return { rows: rows.slice(0, AUDIT_PAGE_SIZE), hasMore: rows.length > AUDIT_PAGE_SIZE };
 }

@@ -6,11 +6,13 @@ import {
   CertificatesCard,
   ContributionHistory,
   HoursChart,
+  RateEventsCard,
   RecommendedCard,
   UpcomingCard,
   WelcomeHeader,
 } from "@/components/volunteer/Dashboard";
 import { DataView } from "@/components/volunteer/DataView";
+import { getPendingFeedback } from "@/lib/api/feedback";
 import {
   getCertificates,
   getContributionHistory,
@@ -32,10 +34,11 @@ export function DashboardView() {
           getMonthlyHours(),
           getSkillsContributed(),
           getCertificates(),
+          getPendingFeedback().catch(() => []), // an optional prompt: never block the dashboard
         ])
       }
     >
-      {([stats, opportunities, history, monthly, skills, certificates]) => {
+      {([stats, opportunities, history, monthly, skills, certificates, toRate]) => {
         const statTiles = [
           { label: "Total volunteer hours", value: stats.totalHours, note: `+${stats.hoursThisMonth} hrs this month`, good: true },
           { label: "Projects completed", value: stats.projectsCompleted, note: `${stats.upcomingThisWeek} upcoming this week` },
@@ -64,6 +67,7 @@ export function DashboardView() {
               </div>
 
               <aside className="space-y-6">
+                <RateEventsCard events={toRate} />
                 <RecommendedCard opportunities={opportunities} />
                 <Card className="p-5">
                   <CardTitle>Skills contributed</CardTitle>

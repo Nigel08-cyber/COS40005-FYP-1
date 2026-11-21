@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type AccountRole, type AuthUser, homeFor, restoreSession } from "@/lib/api/auth";
+import { type AccountRole, type AuthUser, homeFor, rememberReturnPath, restoreSession } from "@/lib/api/auth";
 
 export const ROLE_LABELS: Record<AccountRole, string> = {
   volunteer: "Volunteer",
@@ -35,7 +35,7 @@ export function useSessionGuard(allowed: AccountRole[]) {
     let cancelled = false;
     restoreSession().then((u) => {
       if (cancelled) return;
-      if (!u) window.location.replace("/login");
+      if (!u) window.location.replace(rememberReturnPath() ? "/login?mode=login" : "/login");
       else if (!allowedKey.split(",").includes(u.role)) window.location.replace(homeFor(u.role));
       else setUser(u);
     });
