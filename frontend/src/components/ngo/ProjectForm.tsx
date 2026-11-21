@@ -2,23 +2,26 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, Placeholder } from "@/components/ui/Card";
 import { TextArea, TextField } from "@/components/ui/Fields";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ChipPicker, FieldLabel, FormSection, LabeledSelect, toggle } from "@/components/staff/FormParts";
+import { ChipPicker, FieldLabel, FormSection, LabeledSelect, TimeSelect, toggle } from "@/components/staff/FormParts";
 import { ApprovalBanner, ComingSoonCard, NotSavedHint } from "@/components/staff/StaffNotices";
 import { useStaff } from "@/components/staff/StaffShell";
 import { errorMessage, todayInMalaysia } from "@/lib/api/http";
 import { saveProject } from "@/lib/api/ngo";
 import { formatLongDate, formatShortDate, formatTime, formatTimeRange } from "@/lib/format";
-import type { ProjectDraft, ProjectFormData } from "@/lib/staffTypes";
+import type { ProjectDraft, ProjectFormData, ProjectSession } from "@/lib/staffTypes";
 
 /** "08:00" -> "8:00 AM" (format.ts expects a full "date T time" value) */
 const time = (hhmm: string) => formatTime(`2000-01-01T${hhmm}`);
 
-type Errors = Partial<Record<"title" | "date" | "venue" | "volunteersRequired" | "endTime" | "coordinatorId", string>>;
+const MAX_SESSIONS = 30;
+
+type SessionErrors = Record<string, { date?: string; endTime?: string }>;
+type Errors = Partial<Record<"title" | "venue" | "volunteersRequired" | "coordinatorId", string>> & { sessions?: SessionErrors };
 
 type Mode = "draft" | "publish" | "update";
 
@@ -26,22 +29,34 @@ type Mode = "draft" | "publish" | "update";
  * A draft only needs a title; publishing (or saving a published project) needs everything volunteers see.
  * A past date is only refused when it was changed (an older project can still be edited).
  */
-function validate(d: ProjectDraft, mode: Mode, hasCoordinators: boolean, savedDate: string): Errors {
+function validate(d: ProjectDraft, mode: Mode, hasCoordinators: boolean, saved: ProjectSession[]): Errors {
   const e: Errors = {};
   if (!d.title.trim()) e.title = "Please enter a project title.";
+  const sessions: SessionErrors = {};
+  d.sessions.forEach((s, i) => {
+    const row: SessionErrors[string] = {};
+    const savedDate = saved.find((x) => x.key === s.key)?.date;
+    if (!s.date) {
+      if (mode !== "draft") row.date = "Please choose a date.";
+    } else if (mode !== "draft" && s.date < todayInMalaysia() && s.date !== savedDate) {
+      row.date = "The date is in the past.";
+    } else if (d.sessions.slice(0, i).some((o) => o.date === s.date && s.startTime < o.endTime && o.startTime < s.endTime)) {
+      row.date = "This overlaps another time on the same day.";
+    }
+    if (s.date && s.endTime <= s.startTime) row.endTime = "The end time must be after the start time.";
+    if (row.date || row.endTime) sessions[s.key] = row;
+  });
+  if (Object.keys(sessions).length) e.sessions = sessions;
   if (mode === "draft") return e;
-  if (!d.date) e.date = "Please choose a date.";
-  else if (d.date < todayInMalaysia() && d.date !== savedDate) e.date = "The date is in the past.";
   if (!d.venue.trim()) e.venue = "Please enter the venue or address.";
   if (!(Number(d.volunteersRequired) > 0)) e.volunteersRequired = "Enter how many volunteers you need.";
-  if (d.endTime <= d.startTime) e.endTime = "The end time must be after the start time.";
   if (hasCoordinators && !d.coordinatorId) e.coordinatorId = "Please choose a project coordinator.";
   return e;
 }
 
 /**
  * Wireframe 12 · Create a project, also used to continue a draft or edit a published project.
- * Save draft = status "draft"; Publish = status "active" + one session; Save changes = update a published project.
+ * Save draft = status "draft"; Publish = status "active" with one session per date; Save changes = update a published project.
  */
 export function ProjectForm({ data }: { data: ProjectFormData }) {
   const router = useRouter();
@@ -62,14 +77,52 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
     if (key in errors) setErrors((e) => ({ ...e, [key]: undefined }));
   };
   const timeOptions = options.times.map((t) => ({ value: t, label: time(t) }));
+  // A saved time that is not on the hour stays selectable.
+  const sessionTimeOptions = (current: string) =>
+    [...new Set([...options.sessionTimes, current])].sort().map((t) => ({ value: t, label: time(t) }));
+
+  const nextRow = useRef(0);
+  const clearSessionError = (key: string) =>
+    setErrors((e) => {
+      if (!e.sessions?.[key]) return e;
+      const sessions = { ...e.sessions };
+      delete sessions[key];
+      return { ...e, sessions: Object.keys(sessions).length ? sessions : undefined };
+    });
+  const setSession = (key: string, change: Partial<ProjectSession>) => {
+    setDraft((d) => ({ ...d, sessions: d.sessions.map((s) => (s.key === key ? { ...s, ...change } : s)) }));
+    clearSessionError(key);
+  };
+  const addSession = () => {
+    nextRow.current += 1;
+    const key = `new-${nextRow.current}`;
+    setDraft((d) => {
+      const last = d.sessions.at(-1);
+      const row: ProjectSession = {
+        key,
+        eventId: null,
+        date: "",
+        startTime: last?.startTime ?? "08:00",
+        endTime: last?.endTime ?? "13:00",
+        registered: 0,
+      };
+      return { ...d, sessions: [...d.sessions, row] };
+    });
+  };
+  const removeSession = (key: string) => {
+    setDraft((d) => ({ ...d, sessions: d.sessions.filter((s) => s.key !== key) }));
+    clearSessionError(key);
+  };
 
   const save = async (mode: Mode) => {
     if (data.ngoId === null) return;
     setFormError(null);
-    const found = validate(draft, mode, options.coordinators.length > 0, data.draft.date);
+    const found = validate(draft, mode, options.coordinators.length > 0, data.draft.sessions);
     setErrors(found);
     if (Object.keys(found).length) {
-      setFormError(Object.values(found).join(" "));
+      const { sessions, ...fields } = found;
+      const sessionMessages = Object.values(sessions ?? {}).flatMap((s) => [s.date, s.endTime]);
+      setFormError([...new Set([...Object.values(fields), ...sessionMessages].filter(Boolean))].join(" "));
       return;
     }
     setSaving(mode);
@@ -93,9 +146,14 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
     }
   };
 
-  const summaryDate = draft.date
-    ? `${formatShortDate(draft.date)} · ${formatTimeRange(`${draft.date}T${draft.startTime}`, `${draft.date}T${draft.endTime}`)}`
-    : "Not set";
+  const datedSessions = draft.sessions.filter((s) => s.date).sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+  const firstSession = datedSessions[0];
+  const lastSession = datedSessions.at(-1);
+  const summaryDate = !firstSession
+    ? "Not set"
+    : datedSessions.length === 1
+      ? `${formatShortDate(firstSession.date)} · ${formatTimeRange(`${firstSession.date}T${firstSession.startTime}`, `${firstSession.date}T${firstSession.endTime}`)}`
+      : `${datedSessions.length} dates · ${formatShortDate(firstSession.date)} – ${formatShortDate(lastSession!.date)}`;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -158,23 +216,59 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
           </FormSection>
 
           <FormSection title="Date & time">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <TextField
-                id="projectDate"
-                label="Date"
-                required
-                type="date"
-                min={todayInMalaysia()}
-                value={draft.date}
-                error={errors.date}
-                onChange={(v) => set("date", v)}
-              />
-              <LabeledSelect label="Start time" value={draft.startTime} onChange={(v) => set("startTime", v)} options={timeOptions} />
-              <div>
-                <LabeledSelect label="End time" value={draft.endTime} onChange={(v) => set("endTime", v)} options={timeOptions} />
-                {errors.endTime && <p className="pt-1 text-xs text-danger">{errors.endTime}</p>}
-              </div>
+            <div className="space-y-3">
+              {draft.sessions.map((s, i) => (
+                <div key={s.key} className="grid items-start gap-3 sm:grid-cols-[1fr_1fr_1fr_2.25rem]">
+                  <TextField
+                    id={i === 0 ? "projectDate" : `projectDate-${s.key}`}
+                    label={draft.sessions.length > 1 ? `Date ${i + 1}` : "Date"}
+                    required
+                    type="date"
+                    min={todayInMalaysia()}
+                    value={s.date}
+                    error={errors.sessions?.[s.key]?.date}
+                    onChange={(v) => setSession(s.key, { date: v })}
+                  />
+                  <TimeSelect
+                    label="Start time"
+                    value={s.startTime}
+                    onChange={(v) => setSession(s.key, { startTime: v })}
+                    options={sessionTimeOptions(s.startTime)}
+                  />
+                  <div>
+                    <TimeSelect
+                      label="End time"
+                      value={s.endTime}
+                      onChange={(v) => setSession(s.key, { endTime: v })}
+                      options={sessionTimeOptions(s.endTime)}
+                    />
+                    {errors.sessions?.[s.key]?.endTime && (
+                      <p className="pt-1 text-xs text-danger">{errors.sessions[s.key].endTime}</p>
+                    )}
+                  </div>
+                  {draft.sessions.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label={`Remove date ${i + 1}`}
+                      title={s.registered ? "Volunteers have registered for this date" : `Remove date ${i + 1}`}
+                      disabled={s.registered > 0}
+                      onClick={() => removeSession(s.key)}
+                      className="flex size-9 items-center justify-center rounded-lg border border-line-strong text-muted hover:border-danger/50 hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line-strong disabled:hover:bg-transparent disabled:hover:text-muted sm:mt-[22px] sm:size-10"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
+            <button
+              type="button"
+              disabled={draft.sessions.length >= MAX_SESSIONS}
+              onClick={addSession}
+              className="mt-3 rounded-full border border-dashed border-line-strong px-3 py-1 text-xs text-ink-soft hover:-translate-y-px hover:border-brand hover:text-brand active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+            >
+              + Add another date
+            </button>
             <label className="group mt-3 flex w-fit items-center gap-2.5 text-xs text-ink-soft">
               <input
                 type="checkbox"
@@ -306,7 +400,7 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
           <Card className="p-5">
             <CardTitle>Summary</CardTitle>
             <dl className="mt-3 space-y-2.5 text-xs">
-              <SummaryRow label="Date" value={summaryDate} title={draft.date ? formatLongDate(draft.date) : undefined} />
+              <SummaryRow label="Date" value={summaryDate} title={datedSessions.length ? datedSessions.map((s) => formatLongDate(s.date)).join(", ") : undefined} />
               <SummaryRow label="Location" value={[draft.venue.trim(), draft.area].filter(Boolean).join(", ") || "Not set"} />
               <SummaryRow label="Volunteers" value={`0 / ${draft.volunteersRequired || "–"}`} />
             </dl>

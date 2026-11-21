@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Chip, Select } from "@/components/ui/Fields";
 import { cx } from "@/lib/format";
@@ -65,6 +65,150 @@ export function LabeledSelect({
         onChange={onChange}
         options={placeholder ? [{ value: "", label: placeholder }, ...normalised] : normalised}
       />
+    </div>
+  );
+}
+
+/** max-h-64 list plus its gap */
+const LIST_HEIGHT_PX = 264;
+const BUTTON_HEIGHT_PX = 40;
+
+/**
+ * Compact time dropdown: the open list shows 8 times and scrolls to the rest.
+ * Keyboard: arrows, Home / End, Enter or Space to choose, Escape to close.
+ */
+export function TimeSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const id = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [openUp, setOpenUp] = useState(false);
+  const selected = Math.max(0, options.findIndex((o) => o.value === value));
+
+  const show = () => {
+    // Open upward when the 8-row list would not fit below the field.
+    const box = root.current?.getBoundingClientRect();
+    setOpenUp(!!box && window.innerHeight - box.bottom < LIST_HEIGHT_PX && box.bottom - BUTTON_HEIGHT_PX > LIST_HEIGHT_PX);
+    setActive(selected);
+    setOpen(true);
+  };
+  const choose = (index: number) => {
+    onChange(options[index].value);
+    setOpen(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+
+  // Keep the highlighted time visible, centred when the list opens.
+  useEffect(() => {
+    const box = list.current;
+    const row = box?.children[active] as HTMLElement | undefined;
+    if (!open || !box || !row) return;
+    if (row.offsetTop < box.scrollTop || row.offsetTop + row.offsetHeight > box.scrollTop + box.clientHeight) {
+      box.scrollTop = row.offsetTop - (box.clientHeight - row.offsetHeight) / 2;
+    }
+  }, [open, active]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
+        e.preventDefault();
+        show();
+      }
+      return;
+    }
+    const moves: Record<string, number> = {
+      ArrowDown: Math.min(active + 1, options.length - 1),
+      ArrowUp: Math.max(active - 1, 0),
+      Home: 0,
+      End: options.length - 1,
+    };
+    if (e.key in moves) {
+      e.preventDefault();
+      setActive(moves[e.key]);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      choose(active);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    } else if (e.key === "Tab") {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div ref={root} className="relative">
+      <p className="mb-1.5 text-xs font-medium">{label}</p>
+      <button
+        type="button"
+        role="combobox"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${id}-list`}
+        aria-activedescendant={open ? `${id}-${active}` : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={onKeyDown}
+        className="flex h-10 w-full items-center justify-between rounded-lg border border-line-strong bg-surface pl-3 pr-3 text-sm text-ink-soft outline-none hover:border-ink/30 hover:bg-canvas focus:border-brand focus:ring-4 focus:ring-brand/10"
+      >
+        {options[selected]?.label ?? value}
+        <svg
+          className={cx("size-3.5 text-muted transition-transform duration-200", open && "rotate-180")}
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul
+          ref={list}
+          id={`${id}-list`}
+          role="listbox"
+          aria-label={label}
+          className={cx(
+            "absolute z-30 max-h-64 w-full overflow-y-auto rounded-lg border border-line-strong bg-surface py-0 shadow-lg shadow-ink/10",
+            openUp ? "bottom-11" : "mt-1",
+          )}
+        >
+          {options.map((o, i) => (
+            <li
+              key={o.value}
+              id={`${id}-${i}`}
+              role="option"
+              aria-selected={i === selected}
+              onPointerEnter={() => setActive(i)}
+              onClick={() => choose(i)}
+              className={cx(
+                "flex h-8 cursor-pointer items-center px-3 text-sm",
+                i === selected ? "bg-brand text-white" : i === active ? "bg-brand-soft text-brand" : "text-ink-soft",
+              )}
+            >
+              {o.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

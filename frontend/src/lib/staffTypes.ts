@@ -61,17 +61,29 @@ export interface Coordinator {
   name: string;
 }
 
+/** One date and time of a project (a backend event). */
+export interface ProjectSession {
+  /** Stable id for the form row */
+  key: string;
+  /** Saved event, null for a new row */
+  eventId: number | null;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** "HH:mm" */
+  startTime: string;
+  endTime: string;
+  /** Registered + waitlisted volunteers; a session with volunteers cannot be removed here */
+  registered: number;
+}
+
 export interface ProjectDraft {
   title: string;
   /** Category label, e.g. "Food distribution" */
   category: string;
   coordinatorId: string;
   description: string;
-  /** "YYYY-MM-DD" */
-  date: string;
-  /** "HH:mm" */
-  startTime: string;
-  endTime: string;
+  /** Every date and time of the project */
+  sessions: ProjectSession[];
   /** Not stored by the backend yet */
   repeatWeekly: boolean;
   venue: string;
@@ -102,8 +114,10 @@ export interface ProjectFormOptions {
   languages: string[];
   skills: string[];
   days: string[];
-  /** "HH:mm" values offered in the time dropdowns */
+  /** "HH:mm" values offered in the preferred availability dropdowns */
   times: string[];
+  /** "HH:mm" values offered for session start / end times (all 24 hours) */
+  sessionTimes: string[];
 }
 
 export interface ProjectFormData {
@@ -118,8 +132,8 @@ export interface ProjectFormData {
 export interface ExistingProject {
   projectId: string;
   status: "draft" | "active" | "completed" | "cancelled";
-  /** The session that is updated when the date / time / venue change (null = none yet) */
-  eventId: number | null;
+  /** Saved sessions; one removed from the form is cancelled */
+  eventIds: number[];
   /** Coordinator saved on the project, to know whether it changed */
   coordinatorId: string;
 }

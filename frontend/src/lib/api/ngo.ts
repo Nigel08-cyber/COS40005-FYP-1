@@ -8,7 +8,6 @@
 */
 import { ApiError, api, shortDay, todayInMalaysia, utcToLocal } from "@/lib/api/http";
 import {
-  type EventApi,
   type ProjectApi,
   categoryLabel,
   coordinatorOptions,
@@ -16,7 +15,6 @@ import {
   getEvents,
   getMembers,
   getMyNgo,
-  pickSession,
   toListItem,
   type NgoApi,
 } from "@/lib/api/projects";
@@ -28,6 +26,7 @@ import {
   LANGUAGES,
   ORG_ACTIVITIES,
   ORG_TYPES,
+  SESSION_TIMES,
   STANDING_SKILLS,
   STATES,
   TIMES,
@@ -41,6 +40,7 @@ import type {
   ProjectDraft,
   ProjectDraftItem,
   ProjectFormData,
+  ProjectSession,
   ProjectListItem,
   ProjectsData,
 } from "@/lib/staffTypes";
@@ -228,14 +228,14 @@ export async function getProjectsData(): Promise<ProjectsData> {
 
 /* ---------------- 12 · create / edit a project ---------------- */
 
+const emptySession: ProjectSession = { key: "session-1", eventId: null, date: "", startTime: "08:00", endTime: "13:00", registered: 0 };
+
 const emptyDraft: ProjectDraft = {
   title: "",
   category: CATEGORIES[0].label,
   coordinatorId: "",
   description: "",
-  date: "",
-  startTime: "08:00",
-  endTime: "13:00",
+  sessions: [emptySession],
   repeatWeekly: false,
   venue: "",
   area: AREAS[0],
@@ -270,9 +270,19 @@ async function loadExisting(id: string, ngoId: number): Promise<{ draft: Project
   }
   if (p.ngo_id !== ngoId) return null;
   const [events, skills] = await Promise.all([getEvents(id), api<{ skill_name: string }[]>(`/projects/${id}/skills`)]);
-  const session: EventApi | null = pickSession(events);
-  const start = session ? utcToLocal(session.start_datetime) : "";
-  const end = session ? utcToLocal(session.end_datetime) : "";
+  const saved = events.filter((e) => e.status !== "cancelled");
+  const sessions = saved.map<ProjectSession>((e) => {
+    const start = utcToLocal(e.start_datetime);
+    const end = utcToLocal(e.end_datetime);
+    return {
+      key: `event-${e.event_id}`,
+      eventId: e.event_id,
+      date: start.slice(0, 10),
+      startTime: start.slice(11, 16),
+      endTime: end.slice(11, 16),
+      registered: e.registered_count + e.waitlist_count,
+    };
+  });
   const { venue, area } = splitLocation(p.location);
   const experience = experienceLabel(p.min_experience_years);
 
@@ -280,7 +290,7 @@ async function loadExisting(id: string, ngoId: number): Promise<{ draft: Project
     existing: {
       projectId: id,
       status: p.status,
-      eventId: session?.event_id ?? null,
+      eventIds: saved.map((e) => e.event_id),
       coordinatorId: p.coordinator_id ? String(p.coordinator_id) : "",
     },
     draft: {
@@ -289,10 +299,8 @@ async function loadExisting(id: string, ngoId: number): Promise<{ draft: Project
       category: categoryLabel(p.category) === "Uncategorised" ? emptyDraft.category : categoryLabel(p.category),
       coordinatorId: p.coordinator_id ? String(p.coordinator_id) : "",
       description: p.description ?? "",
-      date: start.slice(0, 10) || (p.start_date ?? ""),
-      startTime: start.slice(11, 16) || emptyDraft.startTime,
-      endTime: end.slice(11, 16) || emptyDraft.endTime,
-      venue: session?.venue ?? venue,
+      sessions: sessions.length ? sessions : [{ ...emptySession, date: p.start_date ?? "" }],
+      venue: saved[0]?.venue ?? venue,
       area,
       volunteersRequired: p.volunteers_needed ? String(p.volunteers_needed) : "",
       minExperience: EXPERIENCE_LEVELS.some((e) => e.label === experience) ? experience : emptyDraft.minExperience,
@@ -332,6 +340,7 @@ export async function getProjectFormData(editId?: string): Promise<ProjectFormDa
       skills: skills.map((s) => s.skill_name),
       days: DAYS,
       times: TIMES,
+      sessionTimes: SESSION_TIMES,
     },
   };
 }
@@ -340,13 +349,14 @@ export async function getProjectFormData(editId?: string): Promise<ProjectFormDa
 let skillIds = new Map<string, number>();
 
 function projectFields(draft: ProjectDraft) {
+  const dates = draft.sessions.map((s) => s.date).filter(Boolean).sort();
   return {
     title: draft.title.trim(),
     description: orNull(draft.description),
     category: categoryCode(draft.category),
     location: [draft.venue.trim(), draft.area].filter(Boolean).join(", ") || null,
-    start_date: draft.date || null,
-    end_date: draft.date || null,
+    start_date: dates[0] ?? null,
+    end_date: dates.at(-1) ?? null,
     volunteers_needed: Number(draft.volunteersRequired) || null,
     min_experience_years: EXPERIENCE_LEVELS.find((e) => e.label === draft.minExperience)?.years ?? null,
     preferred_day: DAYS.indexOf(draft.preferredDay) + 1 || null,
@@ -355,12 +365,12 @@ function projectFields(draft: ProjectDraft) {
   };
 }
 
-function sessionFields(draft: ProjectDraft) {
+function sessionFields(draft: ProjectDraft, session: ProjectSession) {
   return {
     title: draft.title.trim(),
     venue: orNull(draft.venue),
-    start_datetime: localToUtc(draft.date, draft.startTime),
-    end_datetime: localToUtc(draft.date, draft.endTime),
+    start_datetime: localToUtc(session.date, session.startTime),
+    end_datetime: localToUtc(session.date, session.endTime),
     capacity: Number(draft.volunteersRequired) || null,
   };
 }
@@ -369,8 +379,9 @@ function sessionFields(draft: ProjectDraft) {
  * New project: POST /projects (status draft or active).
  * Saved project: PATCH /projects/{id}, PUT /projects/{id}/coordinator when the coordinator changed, and
  * PATCH /projects/{id}/status to publish a draft.
- * Then PUT /projects/{id}/skills, and for a published project create (POST /projects/{id}/events) or
- * update (PATCH /events/{id}) its session so volunteers can register.
+ * Then PUT /projects/{id}/skills and save every date as an event: POST /projects/{id}/events for a new one,
+ * PATCH /events/{id} for a saved one (a removed one is cancelled). Draft projects keep draft events, which
+ * volunteers cannot see; publishing makes them active.
  */
 export async function saveProject(
   draft: ProjectDraft,
@@ -406,13 +417,24 @@ export async function saveProject(
     await api(`/projects/${projectId}/skills`, { method: "PUT", json: skills.map((skill_id) => ({ skill_id })) });
   }
 
-  const published = mode === "publish" || (mode === "update" && existing?.status !== "draft");
-  if (published && draft.date) {
-    if (existing?.eventId) {
-      await api(`/events/${existing.eventId}`, { method: "PATCH", json: sessionFields(draft) });
+  const sessions = draft.sessions.filter((s) => s.date);
+  for (const session of sessions) {
+    const fields = sessionFields(draft, session);
+    if (session.eventId) {
+      await api(`/events/${session.eventId}`, {
+        method: "PATCH",
+        json: mode === "publish" ? { ...fields, status: "active" } : fields,
+      });
     } else {
-      await api(`/projects/${projectId}/events`, { method: "POST", json: { ...sessionFields(draft), status: "active" } });
+      await api(`/projects/${projectId}/events`, {
+        method: "POST",
+        json: { ...fields, status: mode === "draft" ? "draft" : "active" },
+      });
     }
+  }
+  const kept = new Set(sessions.map((s) => s.eventId));
+  for (const eventId of existing?.eventIds ?? []) {
+    if (!kept.has(eventId)) await api(`/events/${eventId}`, { method: "PATCH", json: { status: "cancelled" } });
   }
   if (existing && mode === "publish") {
     await api(`/projects/${projectId}/status`, { method: "PATCH", json: { status: "active" } });

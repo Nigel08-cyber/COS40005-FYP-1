@@ -95,10 +95,10 @@ Connected by the backend team (see the comments in that file). Gaps found while 
 | --- | --- | --- |
 | `/ngo/profile` | 10 · Organisation profile | `GET /ngos?mine=true`; first save `POST /ngos` (starts **pending** until a platform admin approves it), later saves `PATCH /ngos/{id}` |
 | `/ngo/projects` | Projects list | `GET /projects` (filtered to the admin's NGO), `GET /ngos/{id}/members` (coordinator names), `GET /projects/{id}/events` (next session date and registered count) |
-| `/ngo/projects/new` | 12 · Create a project | `GET /skills`, `GET /ngos/{id}/members`; **Save draft** → `POST /projects` (status `draft`); **Publish** → `POST /projects` (status `active`) + `POST /projects/{id}/events` (one session); both then `PUT /projects/{id}/skills` |
+| `/ngo/projects/new` | 12 · Create a project | `GET /skills`, `GET /ngos/{id}/members`; **Save draft** → `POST /projects` (status `draft`) + one draft event per date; **Publish** → `POST /projects` (status `active`) + one active event per date (`POST /projects/{id}/events`); both also `PUT /projects/{id}/skills` |
 | `/ngo/dashboard` | 13 · NGO dashboard | `GET /ngos/{id}/dashboard` + the projects list for "Upcoming projects" |
 | `/ngo/projects/[id]` | Project details (no wireframe) | `GET /projects/{id}`, `/events`, `/skills`, `/applications`, `GET /ngos/{id}/members`; **Mark as completed** / **Cancel project** → `PATCH /projects/{id}/status` (cancel also sets each open session to cancelled with `PATCH /events/{id}`); coordinator dropdown → `PUT /projects/{id}/coordinator`; **Approve / Reject** → `PATCH /applications/{id}` (reject reason → `coordinator_note`) |
-| `/ngo/projects/[id]/edit` | 12 (edit mode) | Same form as Create. Saves with `PATCH /projects/{id}`, `PUT /projects/{id}/skills`, `PUT /projects/{id}/coordinator` if changed; a published project's session is updated with `PATCH /events/{id}`; **Publish** on a draft → `POST /projects/{id}/events` + `PATCH /projects/{id}/status` (active) |
+| `/ngo/projects/[id]/edit` | 12 (edit mode) | Same form as Create. Saves with `PATCH /projects/{id}`, `PUT /projects/{id}/skills`, `PUT /projects/{id}/coordinator` if changed; saved dates are updated with `PATCH /events/{id}`, new dates use `POST /projects/{id}/events`, and removed dates are cancelled (a date with registered or waitlisted volunteers cannot be removed); **Publish** on a draft makes its events active + `PATCH /projects/{id}/status` (active) |
 | `/ngo/volunteers` | Volunteers (no wireframe) | Applications to every published project of the NGO (`GET /projects/{id}/applications` per project), with search, status tabs and a project filter |
 | `/ngo/team` | Team (no wireframe) | `GET / POST /ngos/{id}/members` (adds an existing account by email as coordinator or admin), `DELETE /ngos/{id}/members/{user_id}` |
 
@@ -162,9 +162,10 @@ Fields and blocks below are visible on the pages but marked **"Not saved yet"** 
   list; today the search only covers people who applied.
 - A per-session roster (`GET /events/{id}/registrations`, with names) — also needed for attendance.
 
-**Drafts**
-- A draft has no session yet, so its start / end time is not stored; reopening a draft shows the default
-  8:00 AM–1:00 PM. Either store the times on the project or allow a draft session.
+**Multi-date projects**
+- `GET /opportunities` and `GET /opportunities/{id}` return only the **next** active event, so a volunteer can
+  register for one date at a time. To let volunteers choose among all dates, the response needs every upcoming
+  event, and the volunteer detail page needs a date picker.
 
 **NGO dashboard (`NgoDashboardOut`)**
 - Active / new / returning volunteer counts
