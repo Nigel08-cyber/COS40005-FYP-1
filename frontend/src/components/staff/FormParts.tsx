@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Chip, Select } from "@/components/ui/Fields";
 import { cx } from "@/lib/format";
@@ -73,19 +73,24 @@ export function FieldLabel({ children }: { children: React.ReactNode }) {
   return <p className="mb-1.5 text-xs font-medium">{children}</p>;
 }
 
-/** Toggleable chips plus an optional "+ Add" chip that turns into a small input. */
+/** Toggleable chips plus an optional "+ Add" chip that turns into a small input. Items in `removable` get an ×. */
 export function ChipPicker({
   items,
   selected,
   onToggle,
   addLabel,
   onAdd,
+  removable = [],
+  onRemove,
 }: {
   items: string[];
   selected: string[];
   onToggle: (item: string) => void;
   addLabel?: string;
   onAdd?: (item: string) => void;
+  /** Items the user added themselves; the default options are never listed here */
+  removable?: string[];
+  onRemove?: (item: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -100,11 +105,37 @@ export function ChipPicker({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <AnimatePresence initial={false}>
-        {items.map((item) => (
-          <motion.span key={item} layout initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-            <Chip label={item} active={selected.includes(item)} onToggle={() => onToggle(item)} />
-          </motion.span>
-        ))}
+        {items.map((item) => {
+          const canRemove = !!onRemove && removable.includes(item);
+          return (
+            <motion.span
+              key={item}
+              layout
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.15 } }}
+              className="relative inline-flex"
+            >
+              <Chip
+                label={item}
+                active={selected.includes(item)}
+                onToggle={() => onToggle(item)}
+                className={canRemove ? "pr-6" : undefined}
+              />
+              {canRemove && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${item}`}
+                  title={`Remove ${item}`}
+                  onClick={() => onRemove(item)}
+                  className="absolute right-1 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full text-current hover:bg-danger hover:text-white focus-visible:bg-danger focus-visible:text-white focus-visible:outline-none"
+                >
+                  ×
+                </button>
+              )}
+            </motion.span>
+          );
+        })}
       </AnimatePresence>
       {addLabel && onAdd && (
         <motion.span layout>
@@ -190,25 +221,57 @@ export function FileField({
   labelExtra?: React.ReactNode;
   accept?: string;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+
+  const remove = () => {
+    // Clear the browser's selection too, so the same file can be chosen again.
+    if (input.current) input.current.value = "";
+    onChange("");
+  };
+
   return (
-    <label className="block">
-      <FieldLabel>
-        {label}
-        {labelExtra}
-      </FieldLabel>
-      <input
-        type="file"
-        accept={accept}
-        className="sr-only"
-        onChange={(e) => onChange(e.target.files?.[0]?.name ?? "")}
-      />
-      <span className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface px-3 text-sm hover:border-ink/30 hover:bg-canvas">
-        <span className={cx("truncate", fileName ? "text-ink" : "text-faint")}>{fileName || placeholder}</span>
-        <svg viewBox="0 0 16 16" fill="none" className="size-4 shrink-0 text-muted" aria-hidden>
-          <path d="M8 11V3M5 6l3-3 3 3M3 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </label>
+    <div className="relative">
+      <label className="block">
+        <FieldLabel>
+          {label}
+          {labelExtra}
+        </FieldLabel>
+        <input
+          ref={input}
+          type="file"
+          accept={accept}
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onChange(file.name);
+          }}
+        />
+        <span
+          className={cx(
+            "flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface pl-3 text-sm hover:border-ink/30 hover:bg-canvas",
+            fileName ? "pr-10" : "pr-3",
+          )}
+        >
+          <span className={cx("truncate", fileName ? "text-ink" : "text-faint")}>{fileName || placeholder}</span>
+          {!fileName && (
+            <svg viewBox="0 0 16 16" fill="none" className="size-4 shrink-0 text-muted" aria-hidden>
+              <path d="M8 11V3M5 6l3-3 3 3M3 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+      </label>
+      {fileName && (
+        <button
+          type="button"
+          aria-label={`Remove ${fileName}`}
+          title="Remove file"
+          onClick={remove}
+          className="absolute bottom-2 right-2 flex size-6 items-center justify-center rounded-full text-muted hover:bg-danger hover:text-white focus-visible:bg-danger focus-visible:text-white focus-visible:outline-none"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 

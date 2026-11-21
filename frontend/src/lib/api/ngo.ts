@@ -6,7 +6,7 @@
   Fields the backend does not store yet are kept in the forms and marked "Not saved yet"
   (see BACKEND_INTEGRATION.md, section 4).
 */
-import { api, shortDay, todayInMalaysia, utcToLocal } from "@/lib/api/http";
+import { ApiError, api, shortDay, todayInMalaysia, utcToLocal } from "@/lib/api/http";
 import {
   type EventApi,
   type ProjectApi,
@@ -127,6 +127,40 @@ export async function getOrgProfile(): Promise<OrgProfileData> {
   };
 }
 
+const REGISTRATION_PREFIX = "PPM-001-01-";
+const REGISTRATION_DIGITS = 5;
+/** How many taken numbers to skip before giving up (other organisations may be saving at the same time). */
+const REGISTRATION_ATTEMPTS = 100;
+
+const registrationNo = (n: number) => `${REGISTRATION_PREFIX}${String(n).padStart(REGISTRATION_DIGITS, "0")}`;
+const registrationSequence = (value: string) =>
+  value.startsWith(REGISTRATION_PREFIX) && /^\d+$/.test(value.slice(REGISTRATION_PREFIX.length))
+    ? Number(value.slice(REGISTRATION_PREFIX.length))
+    : null;
+
+/**
+ * The next number after the highest one this user can see. Pending organisations are hidden from
+ * GET /ngos, so this can already be taken: saveOrgProfile moves on to the next free number.
+ */
+export async function getNextRegistrationNo() {
+  const ngos = await api<NgoApi[]>("/ngos");
+  const highest = Math.max(0, ...ngos.map((n) => registrationSequence(n.registration_no) ?? 0));
+  return registrationNo(highest + 1);
+}
+
+/** POST /ngos with the next free number. The database's UNIQUE rule is what guarantees no duplicates. */
+async function createWithRegistrationNo(body: Record<string, unknown>, preferred: string) {
+  let sequence = registrationSequence(preferred) ?? registrationSequence(await getNextRegistrationNo()) ?? 1;
+  for (let attempt = 0; attempt < REGISTRATION_ATTEMPTS; attempt++, sequence++) {
+    try {
+      return await api<NgoApi>("/ngos", { method: "POST", json: { ...body, registration_no: registrationNo(sequence) } });
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 409)) throw e;
+    }
+  }
+  throw new ApiError(409, "Could not assign a registration number. Please try again.");
+}
+
 /**
  * Creates the organisation (POST /ngos, starts as "pending" until a platform admin approves it)
  * or updates it (PATCH /ngos/{id}). Fields marked "Not saved yet" are not sent.
@@ -145,9 +179,9 @@ export async function saveOrgProfile(profile: OrgProfile, ngoId: number | null):
   };
   const ngo =
     ngoId === null
-      ? await api<NgoApi>("/ngos", { method: "POST", json: { ...body, registration_no: profile.registrationNo.trim() } })
+      ? await createWithRegistrationNo(body, profile.registrationNo)
       : await api<NgoApi>(`/ngos/${ngoId}`, { method: "PATCH", json: body });
-  return { ngoId: ngo.ngo_id, status: ngo.status, profile };
+  return { ngoId: ngo.ngo_id, status: ngo.status, profile: { ...profile, registrationNo: ngo.registration_no } };
 }
 
 /* ---------------- projects list ---------------- */

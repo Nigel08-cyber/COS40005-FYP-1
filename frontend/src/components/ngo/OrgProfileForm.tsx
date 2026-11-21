@@ -12,7 +12,7 @@ import { ChipPicker, FieldLabel, FileField, FormSection, LabeledSelect, Removabl
 import { ApprovalBanner, NotSavedHint } from "@/components/staff/StaffNotices";
 import { useStaff } from "@/components/staff/StaffShell";
 import { errorMessage } from "@/lib/api/http";
-import { saveOrgProfile } from "@/lib/api/ngo";
+import { getNextRegistrationNo, saveOrgProfile } from "@/lib/api/ngo";
 import type { OrgProfile, OrgProfileData, OrgProfileOptions } from "@/lib/staffTypes";
 
 const PREVIEW_TAGS = 3;
@@ -32,11 +32,10 @@ function initialsOf(name: string) {
   );
 }
 
-function validate(p: OrgProfile, creating: boolean): Errors {
+function validate(p: OrgProfile): Errors {
   const e: Errors = {};
   if (!p.name.trim()) e.name = "Please enter the organisation name.";
   if (!p.description.trim()) e.description = "Please describe what your organisation does.";
-  if (creating && !p.registrationNo.trim()) e.registrationNo = "Please enter the registration number.";
   if (p.email.trim() && !EMAIL_RE.test(p.email.trim())) e.email = "Please enter a valid email address.";
   if (p.phone.trim().length > PHONE_MAX) e.phone = `Use at most ${PHONE_MAX} characters.`;
   return e;
@@ -58,7 +57,12 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState<"draft" | "final" | null>(null);
+  const [assigningNo, setAssigningNo] = useState(false);
   const creating = ngoId === null;
+  // Areas saved earlier or typed with "+ Add"; the default options can never be removed.
+  const customActivities = [...new Set([...extraActivities, ...profile.areasOfActivity])].filter(
+    (a) => !options.activities.includes(a),
+  );
 
   const set = <K extends keyof OrgProfile>(key: K, value: OrgProfile[K]) => {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -71,9 +75,29 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
     setAreaDraft("");
   };
 
+  /** Fills the read-only field the first time it is clicked or focused. */
+  const assignRegistrationNo = async () => {
+    if (!creating || profile.registrationNo || assigningNo) return;
+    setAssigningNo(true);
+    try {
+      const next = await getNextRegistrationNo();
+      setProfile((p) => (p.registrationNo ? p : { ...p, registrationNo: next }));
+      setErrors((e) => ({ ...e, registrationNo: undefined }));
+    } catch (e) {
+      setErrors((current) => ({ ...current, registrationNo: errorMessage(e) }));
+    } finally {
+      setAssigningNo(false);
+    }
+  };
+
+  const removeActivity = (activity: string) => {
+    setExtraActivities((list) => list.filter((a) => a !== activity));
+    set("areasOfActivity", profile.areasOfActivity.filter((a) => a !== activity));
+  };
+
   const save = async (mode: "draft" | "final") => {
     setFormError(null);
-    const found = validate(profile, creating);
+    const found = validate(profile);
     setErrors(found);
     if (Object.keys(found).length) {
       setFormError("Please fix the highlighted fields.");
@@ -83,6 +107,7 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
     try {
       const saved = await saveOrgProfile(profile, ngoId);
       setNgoId(saved.ngoId);
+      setProfile((p) => ({ ...p, registrationNo: saved.profile.registrationNo }));
       setStatus(saved.status);
       if (creating) notify("Organisation created. A platform admin needs to approve it.");
       else notify("Organisation profile saved.");
@@ -147,12 +172,17 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
                 id="registrationNo"
                 label="Registration no."
                 required={creating}
-                labelExtra={creating ? undefined : <span className="ml-1.5 text-[10px] text-faint">Cannot be changed</span>}
-                placeholder="e.g. PPM-001-10-12345"
+                labelExtra={
+                  <span className="ml-1.5 text-[10px] text-faint">{creating ? "Assigned automatically" : "Cannot be changed"}</span>
+                }
+                placeholder={assigningNo ? "Assigning a number…" : "Click to assign a number"}
                 value={profile.registrationNo}
                 error={errors.registrationNo}
+                readOnly
                 disabled={!creating}
-                onChange={(v) => set("registrationNo", v)}
+                onClick={assignRegistrationNo}
+                onFocus={assignRegistrationNo}
+                onChange={() => undefined}
               />
             </div>
           </FormSection>
@@ -164,6 +194,8 @@ export function OrgProfileForm({ data, options }: { data: OrgProfileData; option
               selected={profile.areasOfActivity}
               onToggle={(a) => set("areasOfActivity", toggle(profile.areasOfActivity, a))}
               addLabel="Add"
+              removable={customActivities}
+              onRemove={removeActivity}
               onAdd={(a) => {
                 setExtraActivities((e) => (e.includes(a) ? e : [...e, a]));
                 if (!profile.areasOfActivity.includes(a)) set("areasOfActivity", [...profile.areasOfActivity, a]);

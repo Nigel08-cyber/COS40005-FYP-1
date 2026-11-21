@@ -179,10 +179,12 @@ export function Chip({
   label,
   active,
   onToggle,
+  className,
 }: {
   label: string;
   active: boolean;
   onToggle: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -194,6 +196,7 @@ export function Chip({
         active
           ? "border-brand bg-brand-soft text-brand"
           : "border-line-strong bg-surface text-ink-soft hover:border-ink/30 hover:text-ink",
+        className,
       )}
     >
       {label}

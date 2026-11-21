@@ -116,8 +116,9 @@ Behaviour worth knowing:
   and Create project.
 - While the organisation is **pending** (or suspended) a banner explains it, and "Create project" /
   "Publish" are disabled (the backend would answer 409).
-- **Registration no.** is required when creating the organisation and read-only afterwards (not in
-  `NgoUpdate`).
+- **Registration no.** is assigned by the frontend as `PPM-001-01-00001`, `00002`... when the field is clicked. Pending
+  organisations are hidden from `GET /ngos`, so on a 409 the save moves to the next number; the database UNIQUE rule
+  prevents duplicates. It is read-only afterwards (not in `NgoUpdate`).
 - **Areas of activity** and **service areas** are saved as comma-separated text in `focus_areas` /
   `service_areas`.
 - **Minimum experience** maps to `min_experience_years` (none / 1 / 2 / 3 years); **preferred day** to
