@@ -14,7 +14,7 @@ export function downloadIcs(o: Opportunity) {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//VolunteerHub//EN",
+    "PRODID:-//Tandem//EN",
     "BEGIN:VEVENT",
     `UID:${o.id}@volunteerhub`,
     `DTSTAMP:${toIcsUtc(o.start)}`,

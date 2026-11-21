@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     email_backend: str = "log"
     brevo_api_key: str = ""  # secret: environment / .env only, never committed
     mail_from_email: str = ""  # must be a sender verified in Brevo
-    mail_from_name: str = "Volunteer Hub"
+    mail_from_name: str = "Tandem"
 
     # "production" makes startup refuse an unsafe configuration (default JWT secret, insecure cookie)
     environment: str = "development"

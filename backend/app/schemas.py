@@ -100,12 +100,17 @@ class NgoIn(BaseModel):
     address: str | None = None
     city: str | None = None
     state: str | None = None
+    organisation_type: str | None = Field(default=None, max_length=80)
+    contact_person: str | None = Field(default=None, max_length=120)
+    standing_skills: str | None = None  # comma-separated, like focus_areas
+    typical_volunteers: int | None = Field(default=None, gt=0, le=32767)
 
 
 class NgoOut(NgoIn):
     model_config = ConfigDict(from_attributes=True)
     ngo_id: int
     status: str
+    logo_updated_at: datetime | None = None  # None = no logo; otherwise GET /ngos/{id}/logo (use it as a cache-buster)
 
 
 class NgoStatusIn(BaseModel):
@@ -138,6 +143,9 @@ class ProjectIn(BaseModel):
     preferred_day: int | None = Field(default=None, ge=1, le=7)  # 1 = Monday .. 7 = Sunday
     preferred_start_time: time | None = None
     preferred_end_time: time | None = None
+    language: str | None = Field(default=None, max_length=80)
+    additional_requirements: str | None = None
+    require_approval: bool = True  # False: every application is approved automatically
     coordinator_id: int | None = None
     status: ProjectStatus = "draft"
 
@@ -158,6 +166,9 @@ class ProjectOut(BaseModel):
     preferred_day: int | None = None
     preferred_start_time: time | None = None
     preferred_end_time: time | None = None
+    language: str | None = None
+    additional_requirements: str | None = None
+    require_approval: bool = True
     status: str
     created_at: datetime | None = None
 
@@ -251,6 +262,10 @@ class NgoUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     website: str | None = Field(default=None, max_length=200)
     address: str | None = Field(default=None, max_length=255)
+    organisation_type: str | None = Field(default=None, max_length=80)
+    contact_person: str | None = Field(default=None, max_length=120)
+    standing_skills: str | None = None
+    typical_volunteers: int | None = Field(default=None, gt=0, le=32767)
     city: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
 
@@ -266,6 +281,9 @@ class MemberDetailOut(BaseModel):
 
 class ProjectUpdate(BaseModel):
     """Partial update. Status and coordinator have their own endpoints."""
+    language: str | None = Field(default=None, max_length=80)
+    additional_requirements: str | None = None
+    require_approval: bool | None = None  # null is ignored (the column cannot be empty)
     title: str | None = Field(default=None, min_length=1, max_length=150)
     description: str | None = None
     category: Category | None = None
@@ -366,6 +384,13 @@ class VolunteerSkillOut(VolunteerSkillIO):
     skill_name: str
 
 
+class CustomSkillIn(BaseModel):
+    """A skill the volunteer typed in themselves (not in the pick-list)."""
+    skill_name: str = Field(min_length=1, max_length=80)
+    proficiency_level: int = Field(default=3, ge=1, le=5)
+    years_experience: int | None = Field(default=None, ge=0)
+
+
 class LanguageIO(BaseModel):
     language: str = Field(min_length=1, max_length=40)
     proficiency: LanguageLevel = "conversational"
@@ -410,7 +435,10 @@ class ProfileIn(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     max_travel_km: int | None = Field(default=None, ge=0)
-    skills: list[VolunteerSkillIO] | None = None
+    volunteering_frequency: str | None = Field(default=None, max_length=40)
+    preferred_time_of_day: str | None = Field(default=None, max_length=40)
+    skills: list[VolunteerSkillIO] | None = None  # pick-list skills; replaces the stored pick-list skills only
+    custom_skills: list[CustomSkillIn] | None = None  # typed-in skills; replaces the stored custom skills only
     interests: list[Interest] | None = None
     languages: list[LanguageIO] | None = None
     qualifications: list[QualificationIn] | None = None
@@ -432,7 +460,11 @@ class ProfileOut(BaseModel):
     latitude: float | None
     longitude: float | None
     max_travel_km: int | None
+    volunteering_frequency: str | None = None
+    preferred_time_of_day: str | None = None
+    photo_updated_at: datetime | None = None  # None = no photo; otherwise GET /me/profile/photo
     skills: list[VolunteerSkillOut]
+    custom_skills: list[VolunteerSkillOut] = []
     interests: list[str]
     languages: list[LanguageIO]
     qualifications: list[QualificationOut]

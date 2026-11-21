@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "VolunteerHub",
+  title: "Tandem",
   description: "Community Volunteer & NGO Management Platform",
 };
 

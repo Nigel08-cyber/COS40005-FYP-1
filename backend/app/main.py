@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI):
     scheduler.stop()
 
 
-app = FastAPI(title="VolunteerHub API", lifespan=lifespan)
+app = FastAPI(title="Tandem API", lifespan=lifespan)
 app.add_middleware(BaseHTTPMiddleware, dispatch=audit.audit_middleware)  # first added = inner; CORS below stays outermost
 app.add_middleware(
     CORSMiddleware,

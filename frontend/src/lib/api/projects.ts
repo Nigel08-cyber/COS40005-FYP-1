@@ -345,7 +345,7 @@ export async function getTeam(): Promise<TeamData> {
   };
 }
 
-/** POST /ngos/{id}/members — links an existing VolunteerHub account by email. */
+/** POST /ngos/{id}/members — links an existing Tandem account by email. */
 export async function addMember(ngoId: number, email: string, role: "coordinator" | "ngo_admin") {
   await api(`/ngos/${ngoId}/members`, { method: "POST", json: { email: email.trim(), member_role: role } });
 }

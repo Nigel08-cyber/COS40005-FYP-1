@@ -3,7 +3,7 @@ import { Placeholder } from "@/components/ui/Card";
 import { Logo } from "@/components/ui/Logo";
 
 /**
- * Two-column frame of the login and password reset pages: the VolunteerHub pitch on the left,
+ * Two-column frame of the login and password reset pages: the Tandem pitch on the left,
  * the form card on the right.
  */
 export function AuthLayout({

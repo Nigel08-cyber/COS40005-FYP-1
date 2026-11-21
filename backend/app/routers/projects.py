@@ -92,8 +92,9 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
     project = _get_visible(db, user, project_id)
     assert_ngo_staff(db, user, project.ngo_id)
     data = body.model_dump(exclude_unset=True)
-    if data.get("title", "x") is None:
-        data.pop("title")
+    for required in ("title", "require_approval"):  # these columns cannot be empty: null means 'leave as is'
+        if data.get(required, "x") is None:
+            data.pop(required)
     start, end = data.get("start_date", project.start_date), data.get("end_date", project.end_date)
     if start and end and end < start:
         raise HTTPException(422, "end_date is before start_date")

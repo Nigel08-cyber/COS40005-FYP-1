@@ -1,7 +1,7 @@
-<h1 align="center">VolunteerHub API</h1>
+<h1 align="center">Tandem API</h1>
 
 <p align="center">
-  <strong>FastAPI back end for VolunteerHub.</strong><br>
+  <strong>FastAPI back end for Tandem.</strong><br>
   Auth, NGOs, projects, events, applications, QR attendance, notifications and the audit log.
 </p>
 

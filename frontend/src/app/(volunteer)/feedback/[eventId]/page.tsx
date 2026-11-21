@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { PageSkeleton } from "@/components/volunteer/DataView";
 import { FeedbackView } from "@/components/volunteer/FeedbackForm";
 
-export const metadata: Metadata = { title: "Activity feedback · VolunteerHub" };
+export const metadata: Metadata = { title: "Activity feedback · Tandem" };
 
 // Content is loaded client-side behind VolunteerGate (the access token lives in memory), so there is nothing to validate for instant navigation.
 export const instant = false;

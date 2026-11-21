@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DashboardView } from "@/components/volunteer/views/DashboardView";
 
-export const metadata: Metadata = { title: "Dashboard · VolunteerHub" };
+export const metadata: Metadata = { title: "Dashboard · Tandem" };
 
 // Content is loaded client-side behind VolunteerGate (the access token lives in memory), so there is nothing to validate for instant navigation.
 export const instant = false;

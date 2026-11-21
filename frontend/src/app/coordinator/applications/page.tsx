@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { CoordinatorApplicationsView } from "@/components/coordinator/views";
 
-export const metadata: Metadata = { title: "Applications · VolunteerHub" };
+export const metadata: Metadata = { title: "Applications · Tandem" };
 
 // Content is loaded client-side (the access token lives in memory), so there is nothing to validate for instant navigation.
 export const instant = false;

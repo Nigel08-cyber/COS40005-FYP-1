@@ -37,7 +37,7 @@ def main() -> None:
             by_tag.setdefault(tag, []).append(
                 f"| `{method.upper()}` | `{path}` | {body or '-'} | {ok}{' ' + out if out else ''} | {params or '-'} | {doc[:240]} |")
     lines = [
-        "# VolunteerHub API", "",
+        "# Tandem API", "",
         "Generated from the code by `python -m scripts.export_api_docs`. Interactive version: `/docs` (Swagger UI) on the running backend.", "",
         "**Authentication.** `POST /auth/login` returns an access token (15 minutes). Send it as `Authorization: Bearer <token>`. "
         "A rotating httpOnly refresh cookie renews it via `POST /auth/refresh`. Roles: `system_admin`, `ngo_admin`, `project_coordinator`, `volunteer`; "

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
 import { cx } from "@/lib/format";
 
-export const metadata: Metadata = { title: "VolunteerHub · Community Volunteer & NGO Management Platform" };
+export const metadata: Metadata = { title: "Tandem · Community Volunteer & NGO Management Platform" };
 
 // Wireframe 00 – Cover & index. `href` is set for screens that are already built.
 const screens: { no: string; title: string; href?: string }[] = [

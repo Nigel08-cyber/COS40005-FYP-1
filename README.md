@@ -1,4 +1,8 @@
-<h1 align="center">VolunteerHub</h1>
+<p align="center">
+  <img alt="Tandem logo" src="branding/tandem/svg/icon.svg" width="96">
+</p>
+
+<h1 align="center">Tandem</h1>
 
 <p align="center">
   <strong>Find volunteer work, run NGO projects and track every hour in one place.</strong><br>
@@ -53,7 +57,7 @@
 
 ## About
 
-VolunteerHub connects volunteers with community NGOs. A volunteer builds a profile with skills and availability, finds an opportunity, applies, registers for an event and shows up. The NGO reviews applications, runs the events and sees who actually attended. Attendance is recorded by scanning a QR code at the event, and the hours flow into the volunteer's contribution history without anyone retyping them.
+Tandem connects volunteers with community NGOs. A volunteer builds a profile with skills and availability, finds an opportunity, applies, registers for an event and shows up. The NGO reviews applications, runs the events and sees who actually attended. Attendance is recorded by scanning a QR code at the event, and the hours flow into the volunteer's contribution history without anyone retyping them.
 
 It is a two-part app: a Next.js front end on Vercel, and a FastAPI back end that talks to a PostgreSQL database on Neon. The back end runs on a team machine and is exposed over HTTPS with Tailscale Funnel, so the whole stack stays on free tiers.
 
@@ -286,6 +290,8 @@ npm run lint
 ```
 
 ## Changelog
+
+**Week 13** – Project renamed from VolunteerHub to Tandem, with a new logo, favicon and brand kit in `branding/`.
 
 **Sprint 3 (weeks 12 to 13)** – Brevo email, notifications and reminders, QR attendance, contributions, feedback, audit log, production config check, API docs and a staging smoke test. Needs migration `004`.
 

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { PageSkeleton } from "@/components/volunteer/DataView";
 import { CoordinatorProjectView } from "@/components/coordinator/views";
 
-export const metadata: Metadata = { title: "Project · VolunteerHub" };
+export const metadata: Metadata = { title: "Project · Tandem" };
 
 // Content is loaded client-side (the access token lives in memory), so there is nothing to validate for instant navigation.
 export const instant = false;

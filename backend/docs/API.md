@@ -1,4 +1,4 @@
-# VolunteerHub API
+# Tandem API
 
 Generated from the code by `python -m scripts.export_api_docs`. Interactive version: `/docs` (Swagger UI) on the running backend.
 
@@ -10,7 +10,7 @@ Generated from the code by `python -m scripts.export_api_docs`. Interactive vers
 
 | Method | Path | Request body | Success | Query | Notes |
 |---|---|---|---|---|---|
-| `GET` | `/projects/{project_id}/applications` | - | 200 list[ApplicationOut] | - | List Applications |
+| `GET` | `/projects/{project_id}/applications` | - | 200 list[ApplicationDetailOut] | - | Applicants of one project with their name, email and skills (NGO staff of that project only). |
 | `POST` | `/projects/{project_id}/applications` | - | 201 ApplicationOut | - | Apply |
 | `DELETE` | `/projects/{project_id}/applications/me` | - | 200 ApplicationOut | - | Withdraw |
 | `PATCH` | `/applications/{application_id}` | DecisionIn | 200 ApplicationOut | - | Decide |
@@ -68,6 +68,9 @@ Generated from the code by `python -m scripts.export_api_docs`. Interactive vers
 | `POST` | `/ngos` | NgoIn | 201 NgoOut | - | Anyone signed in can register an organisation. It starts as 'pending' until a platform admin activates it, and the creator becomes its ngo_admin. |
 | `GET` | `/ngos/{ngo_id}` | - | 200 NgoOut | - | Get Ngo |
 | `PATCH` | `/ngos/{ngo_id}` | NgoUpdate | 200 NgoOut | - | Edit the organisation profile (ngo_admin of this NGO, or platform admin). |
+| `GET` | `/ngos/{ngo_id}/logo` | - | 200 | - | The organisation logo. Public on purpose (it is brand material), so a plain <img src> works. |
+| `PUT` | `/ngos/{ngo_id}/logo` | - | 200 NgoOut | - | Send the raw image as the body (PNG, JPEG or WebP, at most 1 MB). ngo_admin of this NGO or platform admin. |
+| `DELETE` | `/ngos/{ngo_id}/logo` | - | 200 NgoOut | - | Delete Logo |
 | `PATCH` | `/ngos/{ngo_id}/status` | NgoStatusIn | 200 NgoOut | - | System Admin only: approve (active) or suspend an organisation. |
 | `GET` | `/ngos/{ngo_id}/members` | - | 200 list[MemberDetailOut] | - | List Members |
 | `POST` | `/ngos/{ngo_id}/members` | MemberIn | 201 MemberOut | - | The NGO's admin links an existing user as coordinator (or another admin). |
@@ -126,11 +129,14 @@ Generated from the code by `python -m scripts.export_api_docs`. Interactive vers
 
 | Method | Path | Request body | Success | Query | Notes |
 |---|---|---|---|---|---|
-| `GET` | `/skills` | - | 200 list[SkillOut] | - | List Skills |
+| `GET` | `/skills` | - | 200 list[SkillOut] | - | The shared pick-list. Skills a volunteer typed in themselves (is_custom) are not listed. |
 | `POST` | `/skills` | SkillIn | 201 SkillOut | - | System Admin only: add a skill to the pick-list. |
 | `GET` | `/me/profile` | - | 200 ProfileOut | - | Get Profile |
 | `PUT` | `/me/profile` | ProfileIn | 200 ProfileOut | - | Fields left out are unchanged; a list that is sent (even empty) replaces the stored list. |
 | `PATCH` | `/me/profile` | ProfileIn | 200 ProfileOut | - | Fields left out are unchanged; a list that is sent (even empty) replaces the stored list. |
+| `GET` | `/me/profile/photo` | - | 200 | - | The image itself. The access token travels in a header, so the page fetches it and shows a blob URL. |
+| `PUT` | `/me/profile/photo` | - | 200 ProfileOut | - | Send the raw image as the body (PNG, JPEG or WebP, at most 1 MB). Replaces the current photo. |
+| `DELETE` | `/me/profile/photo` | - | 200 ProfileOut | - | Delete Photo |
 | `GET` | `/me/contributions` | - | 200 list[ContributionOut] | - | My Contributions |
 | `GET` | `/me/stats` | - | 200 VolunteerStatsOut | - | My Stats |
 | `GET` | `/me/hours` | - | 200 list[MonthlyHoursOut] | by?, months? | Hours per calendar month for the last `months` months (oldest first, zero months included). |

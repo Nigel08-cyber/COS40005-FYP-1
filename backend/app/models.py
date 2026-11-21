@@ -7,7 +7,8 @@ All timestamps are naive UTC, as in schema.sql.
 from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
-    JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time,
+    JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, LargeBinary, Numeric, SmallInteger, String, Text,
+    Time,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -45,8 +46,21 @@ class Ngo(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(80), nullable=True)
     state: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    organisation_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    contact_person: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    standing_skills: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated, like focus_areas
+    typical_volunteers: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    logo_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # None = no logo
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | active | suspended
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class NgoLogo(Base):
+    """The organisation logo image (migrations/005). One row per NGO; metadata is on ngo.logo_updated_at."""
+    __tablename__ = "ngo_logo"
+    ngo_id: Mapped[int] = mapped_column(ForeignKey("ngo.ngo_id", ondelete="CASCADE"), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(30))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class NgoMember(Base):
@@ -71,8 +85,19 @@ class VolunteerProfile(Base):
     latitude: Mapped[float | None] = mapped_column(Numeric(9, 6, asdecimal=False), nullable=True)
     longitude: Mapped[float | None] = mapped_column(Numeric(9, 6, asdecimal=False), nullable=True)
     max_travel_km: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    volunteering_frequency: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    preferred_time_of_day: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    photo_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # None = no photo
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # profile_embedding / embedding_model exist in the table but are written by the AI matcher (Part B), not mapped here
+
+
+class VolunteerPhoto(Base):
+    """The volunteer's profile photo (migrations/005). Metadata is on volunteer_profile.photo_updated_at."""
+    __tablename__ = "volunteer_photo"
+    user_id: Mapped[int] = mapped_column(ForeignKey("volunteer_profile.user_id", ondelete="CASCADE"), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(30))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class Skill(Base):
@@ -81,6 +106,7 @@ class Skill(Base):
     skill_name: Mapped[str] = mapped_column(String(80), unique=True)
     category: Mapped[str | None] = mapped_column(String(60), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False)  # typed in by a volunteer; not in the shared pick-list
 
 
 class VolunteerSkill(Base):
@@ -141,6 +167,9 @@ class Project(Base):
     preferred_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     min_experience_years: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     volunteers_needed: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    language: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    additional_requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
+    require_approval: Mapped[bool] = mapped_column(Boolean, default=True)  # False: applications are approved automatically
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | active | completed | cancelled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

@@ -46,13 +46,17 @@ def apply(project_id: int, db: Session = Depends(get_db), user: User = Depends(r
     if project.status != "active":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     existing = _application(db, project_id, user.user_id)
+    # require_approval = false: the application is approved on the spot (no staff decision, decided_by stays empty)
+    status_now = "pending" if project.require_approval else "approved"
+    decided_at = None if project.require_approval else utcnow()
     if existing:
         if existing.status != "withdrawn":
             raise HTTPException(status.HTTP_409_CONFLICT, "You have already applied to this project")
-        existing.status, existing.decided_by, existing.decided_at, existing.applied_at = "pending", None, None, utcnow()
+        existing.status, existing.decided_by, existing.decided_at, existing.applied_at = status_now, None, decided_at, utcnow()
         db.commit()
         return existing
-    app = ProjectApplication(project_id=project_id, user_id=user.user_id, source="applied")
+    app = ProjectApplication(project_id=project_id, user_id=user.user_id, source="applied", status=status_now,
+                             decided_at=decided_at)
     db.add(app)
     db.commit()
     return app

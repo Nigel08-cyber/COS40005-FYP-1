@@ -3,15 +3,16 @@
 from collections import defaultdict
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_roles, require_volunteer
+from app.images import read_image
 from app.models import (
     Availability, Certificate, Contribution, Event, Project, ProjectRequiredSkill, Registration, Skill, User,
-    VolunteerInterest, VolunteerLanguage, VolunteerProfile, VolunteerQualification, VolunteerSkill, utcnow,
+    VolunteerInterest, VolunteerLanguage, VolunteerPhoto, VolunteerProfile, VolunteerQualification, VolunteerSkill, utcnow,
 )
 from app.schemas import (
     ActivityOut, AvailabilityIO, CertificateOut, ContributionOut, LanguageIO, MonthlyHoursOut, ProfileIn,
@@ -21,21 +22,27 @@ from app.schemas import (
 router = APIRouter(tags=["volunteers"])
 
 _SCALARS = ("date_of_birth", "bio", "preferred_activity", "experience_summary", "years_experience",
-            "city", "state", "latitude", "longitude", "max_travel_km")
+            "city", "state", "latitude", "longitude", "max_travel_km", "volunteering_frequency", "preferred_time_of_day")
 
 
 # ---------- skills lookup ----------
 
 @router.get("/skills", response_model=list[SkillOut])
 def list_skills(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.scalars(select(Skill).order_by(Skill.skill_name)).all()
+    """The shared pick-list. Skills a volunteer typed in themselves (is_custom) are not listed."""
+    return db.scalars(select(Skill).where(Skill.is_custom.is_(False)).order_by(Skill.skill_name)).all()
 
 
 @router.post("/skills", response_model=SkillOut, status_code=201)
 def create_skill(body: SkillIn, db: Session = Depends(get_db), _: User = Depends(require_roles())):
     """System Admin only: add a skill to the pick-list."""
-    if db.scalar(select(Skill).where(func.lower(Skill.skill_name) == body.skill_name.lower())):
+    existing = db.scalar(select(Skill).where(func.lower(Skill.skill_name) == body.skill_name.lower()))
+    if existing and not existing.is_custom:
         raise HTTPException(status.HTTP_409_CONFLICT, "This skill already exists")
+    if existing:  # a volunteer already typed it in: promote it to the shared pick-list
+        existing.is_custom, existing.category, existing.description = False, body.category, body.description
+        db.commit()
+        return existing
     skill = Skill(**body.model_dump())
     db.add(skill)
     db.commit()
@@ -46,13 +53,16 @@ def create_skill(body: SkillIn, db: Session = Depends(get_db), _: User = Depends
 
 def _profile_out(db: Session, user: User) -> ProfileOut:
     p = db.get(VolunteerProfile, user.user_id)
-    skills = db.execute(select(VolunteerSkill, Skill.skill_name).join(Skill, Skill.skill_id == VolunteerSkill.skill_id)
+    skills = db.execute(select(VolunteerSkill, Skill.skill_name, Skill.is_custom).join(Skill, Skill.skill_id == VolunteerSkill.skill_id)
                         .where(VolunteerSkill.user_id == user.user_id).order_by(Skill.skill_name)).all()
     return ProfileOut(
         user_id=user.user_id, full_name=user.full_name, email=user.email, phone=user.phone,
         **{f: getattr(p, f) for f in _SCALARS},
+        photo_updated_at=p.photo_updated_at,
         skills=[VolunteerSkillOut(skill_id=v.skill_id, skill_name=n, proficiency_level=v.proficiency_level,
-                                  years_experience=v.years_experience) for v, n in skills],
+                                  years_experience=v.years_experience) for v, n, custom in skills if not custom],
+        custom_skills=[VolunteerSkillOut(skill_id=v.skill_id, skill_name=n, proficiency_level=v.proficiency_level,
+                                         years_experience=v.years_experience) for v, n, custom in skills if custom],
         interests=sorted(db.scalars(select(VolunteerInterest.interest_category).where(VolunteerInterest.user_id == user.user_id))),
         languages=[LanguageIO(language=r.language, proficiency=r.proficiency) for r in db.scalars(
             select(VolunteerLanguage).where(VolunteerLanguage.user_id == user.user_id).order_by(VolunteerLanguage.language))],
@@ -95,12 +105,18 @@ def update_profile(body: ProfileIn, db: Session = Depends(get_db), user: User = 
         ids = [s.skill_id for s in body.skills]
         if len(set(ids)) != len(ids):
             raise HTTPException(422, "Duplicate skill in skills")
-        known = set(db.scalars(select(Skill.skill_id).where(Skill.skill_id.in_(ids)))) if ids else set()
+        known = set(db.scalars(select(Skill.skill_id).where(Skill.skill_id.in_(ids), Skill.is_custom.is_(False)))) if ids else set()
         if known != set(ids):
             raise HTTPException(422, f"Unknown skill_id: {sorted(set(ids) - known)}")
-        _replace(db, VolunteerSkill, user.user_id, [
-            VolunteerSkill(user_id=user.user_id, skill_id=s.skill_id, proficiency_level=s.proficiency_level,
-                           years_experience=s.years_experience) for s in body.skills])
+        db.execute(delete(VolunteerSkill).where(  # replaces the pick-list skills only; custom skills stay
+            VolunteerSkill.user_id == user.user_id,
+            VolunteerSkill.skill_id.in_(select(Skill.skill_id).where(Skill.is_custom.is_(False)))))
+        db.flush()
+        db.add_all(VolunteerSkill(user_id=user.user_id, skill_id=s.skill_id, proficiency_level=s.proficiency_level,
+                                  years_experience=s.years_experience) for s in body.skills)
+        db.flush()
+    if body.custom_skills is not None:
+        _replace_custom_skills(db, user.user_id, body.custom_skills)
     if body.interests is not None:
         _replace(db, VolunteerInterest, user.user_id, [
             VolunteerInterest(user_id=user.user_id, interest_category=c) for c in sorted(set(body.interests))])
@@ -117,6 +133,69 @@ def update_profile(body: ProfileIn, db: Session = Depends(get_db), user: User = 
     if body.availability is not None:
         _replace(db, Availability, user.user_id, [
             Availability(user_id=user.user_id, **a.model_dump()) for a in body.availability])
+    db.commit()
+    return _profile_out(db, user)
+
+
+def _replace_custom_skills(db: Session, user_id: int, custom: list) -> None:
+    """Replace the volunteer's typed-in skills. A name is matched case-insensitively against every skill, so two
+    volunteers typing 'Welding' share one row; a name that is already in the pick-list just uses that skill."""
+    names = [" ".join(c.skill_name.split()) for c in custom]
+    if len({n.lower() for n in names}) != len(names):
+        raise HTTPException(422, "Duplicate skill in custom_skills")
+    db.execute(delete(VolunteerSkill).where(
+        VolunteerSkill.user_id == user_id,
+        VolunteerSkill.skill_id.in_(select(Skill.skill_id).where(Skill.is_custom.is_(True)))))
+    db.flush()
+    for name, c in zip(names, custom):
+        skill = db.scalar(select(Skill).where(func.lower(Skill.skill_name) == name.lower()))
+        if not skill:
+            skill = Skill(skill_name=name, category="custom", is_custom=True)
+            db.add(skill)
+            db.flush()
+        link = db.get(VolunteerSkill, (user_id, skill.skill_id))
+        if link:  # already holds it as a pick-list skill
+            link.proficiency_level, link.years_experience = c.proficiency_level, c.years_experience
+        else:
+            db.add(VolunteerSkill(user_id=user_id, skill_id=skill.skill_id, proficiency_level=c.proficiency_level,
+                                  years_experience=c.years_experience))
+    db.flush()
+    # a typed-in skill nobody uses any more is removed so the table does not fill with leftovers
+    db.execute(delete(Skill).where(
+        Skill.is_custom.is_(True),
+        Skill.skill_id.not_in(select(VolunteerSkill.skill_id)),
+        Skill.skill_id.not_in(select(ProjectRequiredSkill.skill_id))))
+
+
+# ---------- profile photo ----------
+
+@router.get("/me/profile/photo")
+def get_photo(db: Session = Depends(get_db), user: User = Depends(require_volunteer)):
+    """The image itself. The access token travels in a header, so the page fetches it and shows a blob URL."""
+    photo = db.get(VolunteerPhoto, user.user_id)
+    if not photo:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No profile photo")
+    return Response(content=photo.data, media_type=photo.content_type, headers={"Cache-Control": "private, max-age=300"})
+
+
+@router.put("/me/profile/photo", response_model=ProfileOut)
+async def put_photo(request: Request, db: Session = Depends(get_db), user: User = Depends(require_volunteer)):
+    """Send the raw image as the body (PNG, JPEG or WebP, at most 1 MB). Replaces the current photo."""
+    data, content_type = await read_image(request)
+    photo = db.get(VolunteerPhoto, user.user_id)
+    if photo:
+        photo.data, photo.content_type = data, content_type
+    else:
+        db.add(VolunteerPhoto(user_id=user.user_id, data=data, content_type=content_type))
+    db.get(VolunteerProfile, user.user_id).photo_updated_at = utcnow()
+    db.commit()
+    return _profile_out(db, user)
+
+
+@router.delete("/me/profile/photo", response_model=ProfileOut)
+def delete_photo(db: Session = Depends(get_db), user: User = Depends(require_volunteer)):
+    db.execute(delete(VolunteerPhoto).where(VolunteerPhoto.user_id == user.user_id))
+    db.get(VolunteerProfile, user.user_id).photo_updated_at = None
     db.commit()
     return _profile_out(db, user)
 

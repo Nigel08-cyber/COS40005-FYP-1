@@ -32,7 +32,7 @@ export function TeamPage({ data }: { data: TeamData }) {
     e.preventDefault();
     setError(null);
     if (!EMAIL.test(email.trim())) {
-      setEmailError("Enter the email address of their VolunteerHub account.");
+      setEmailError("Enter the email address of their Tandem account.");
       return;
     }
     setAdding(true);
@@ -66,7 +66,7 @@ export function TeamPage({ data }: { data: TeamData }) {
       <Card className="p-5">
         <CardTitle>Add a team member</CardTitle>
         <p className="text-xs text-muted">
-          They need a VolunteerHub account first (they can sign up as a volunteer). Coordinators run projects, review
+          They need a Tandem account first (they can sign up as a volunteer). Coordinators run projects, review
           applications and take attendance.
         </p>
         <form onSubmit={add} className="mt-4 grid gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-start">

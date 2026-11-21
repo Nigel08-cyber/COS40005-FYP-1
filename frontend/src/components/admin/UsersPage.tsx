@@ -42,7 +42,7 @@ function exportCsv(users: AdminUser[]) {
   const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = "volunteerhub-users.csv";
+  a.download = "tandem-users.csv";
   a.click();
   URL.revokeObjectURL(url);
 }

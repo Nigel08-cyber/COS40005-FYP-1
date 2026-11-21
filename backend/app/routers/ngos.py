@@ -1,15 +1,16 @@
 from collections import defaultdict
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, update
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import assert_ngo_staff, get_current_user, require_roles
+from app.images import read_image
 from app.models import (
-    Contribution, Event, Ngo, NgoMember, Project, ProjectApplication, ProjectRequiredSkill, Skill, User, VolunteerSkill,
+    Contribution, Event, Ngo, NgoLogo, NgoMember, Project, ProjectApplication, ProjectRequiredSkill, Skill, User, VolunteerSkill,
     utcnow,
 )
 from app.schemas import (
@@ -65,6 +66,45 @@ def update_ngo(ngo_id: int, body: NgoUpdate, db: Session = Depends(get_db), user
         if k == "name" and v is None:
             continue
         setattr(ngo, k, v)
+    db.commit()
+    return ngo
+
+
+@router.get("/{ngo_id}/logo")
+def get_logo(ngo_id: int, db: Session = Depends(get_db)):
+    """The organisation logo. Public on purpose (it is brand material), so a plain <img src> works."""
+    logo = db.get(NgoLogo, ngo_id)
+    if not logo:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No logo")
+    return Response(content=logo.data, media_type=logo.content_type, headers={"Cache-Control": "public, max-age=300"})
+
+
+@router.put("/{ngo_id}/logo", response_model=NgoOut)
+async def put_logo(ngo_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Send the raw image as the body (PNG, JPEG or WebP, at most 1 MB). ngo_admin of this NGO or platform admin."""
+    ngo = db.get(Ngo, ngo_id)
+    if not ngo:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NGO not found")
+    assert_ngo_staff(db, user, ngo_id, admin_only=True)
+    data, content_type = await read_image(request)
+    logo = db.get(NgoLogo, ngo_id)
+    if logo:
+        logo.data, logo.content_type = data, content_type
+    else:
+        db.add(NgoLogo(ngo_id=ngo_id, data=data, content_type=content_type))
+    ngo.logo_updated_at = utcnow()
+    db.commit()
+    return ngo
+
+
+@router.delete("/{ngo_id}/logo", response_model=NgoOut)
+def delete_logo(ngo_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ngo = db.get(Ngo, ngo_id)
+    if not ngo:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NGO not found")
+    assert_ngo_staff(db, user, ngo_id, admin_only=True)
+    db.execute(delete(NgoLogo).where(NgoLogo.ngo_id == ngo_id))
+    ngo.logo_updated_at = None
     db.commit()
     return ngo
 

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ResetLinkChecking, ResetPassword } from "@/components/auth/PasswordReset";
 
-export const metadata: Metadata = { title: "Set a new password · VolunteerHub" };
+export const metadata: Metadata = { title: "Set a new password · Tandem" };
 
 export default function Page() {
   return (

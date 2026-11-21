@@ -30,7 +30,7 @@ class Message:
     title: str  # email subject and in-app heading (max 150 characters)
     body: str  # plain text; blank lines separate paragraphs
     link: str | None = None  # button in the email
-    link_label: str = "Open Volunteer Hub"
+    link_label: str = "Open Tandem"
 
 
 def _front(path: str) -> str:
