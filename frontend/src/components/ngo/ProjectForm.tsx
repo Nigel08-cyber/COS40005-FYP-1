@@ -76,7 +76,6 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
     setDraft((d) => ({ ...d, [key]: value }));
     if (key in errors) setErrors((e) => ({ ...e, [key]: undefined }));
   };
-  const timeOptions = options.times.map((t) => ({ value: t, label: time(t) }));
   // A saved time that is not on the hour stays selectable.
   const sessionTimeOptions = (current: string) =>
     [...new Set([...options.sessionTimes, current])].sort().map((t) => ({ value: t, label: time(t) }));
@@ -332,13 +331,6 @@ export function ProjectForm({ data }: { data: ProjectFormData }) {
               ) : (
                 <p className="text-xs text-muted">No skills have been added to the platform yet (a platform admin adds them).</p>
               )}
-            </div>
-
-            <p className="mb-2 mt-5 text-xs font-medium">Preferred availability</p>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <LabeledSelect label="Day" value={draft.preferredDay} onChange={(v) => set("preferredDay", v)} options={options.days} />
-              <LabeledSelect label="From" value={draft.preferredFrom} onChange={(v) => set("preferredFrom", v)} options={timeOptions} />
-              <LabeledSelect label="To" value={draft.preferredTo} onChange={(v) => set("preferredTo", v)} options={timeOptions} />
             </div>
 
             <div className="mt-4">

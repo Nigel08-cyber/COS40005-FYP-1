@@ -57,7 +57,3 @@ export const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Sa
 /** Session start / end times: every hour of the day, 12:00 AM to 11:00 PM. */
 export const SESSION_TIMES = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
 
-export const TIMES = [
-  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00",
-  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
-];

@@ -95,9 +95,6 @@ export interface ProjectDraft {
   language: string;
   /** Skill names (from GET /skills) */
   skills: string[];
-  preferredDay: string;
-  preferredFrom: string;
-  preferredTo: string;
   /** Not stored by the backend yet */
   additionalRequirements: string;
   /** Not stored by the backend yet */
@@ -113,9 +110,6 @@ export interface ProjectFormOptions {
   experienceLevels: string[];
   languages: string[];
   skills: string[];
-  days: string[];
-  /** "HH:mm" values offered in the preferred availability dropdowns */
-  times: string[];
   /** "HH:mm" values offered for session start / end times (all 24 hours) */
   sessionTimes: string[];
 }

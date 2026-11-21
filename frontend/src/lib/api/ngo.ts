@@ -21,7 +21,6 @@ import {
 import {
   AREAS,
   CATEGORIES,
-  DAYS,
   EXPERIENCE_LEVELS,
   LANGUAGES,
   ORG_ACTIVITIES,
@@ -29,7 +28,6 @@ import {
   SESSION_TIMES,
   STANDING_SKILLS,
   STATES,
-  TIMES,
 } from "@/lib/ngoOptions";
 import type {
   ExistingProject,
@@ -243,9 +241,6 @@ const emptyDraft: ProjectDraft = {
   minExperience: EXPERIENCE_LEVELS[0].label,
   language: LANGUAGES[0],
   skills: [],
-  preferredDay: "Saturday",
-  preferredFrom: "08:00",
-  preferredTo: "13:00",
   additionalRequirements: "",
   requireApproval: true,
   generateAiRecommendations: true,
@@ -305,9 +300,6 @@ async function loadExisting(id: string, ngoId: number): Promise<{ draft: Project
       volunteersRequired: p.volunteers_needed ? String(p.volunteers_needed) : "",
       minExperience: EXPERIENCE_LEVELS.some((e) => e.label === experience) ? experience : emptyDraft.minExperience,
       skills: skills.map((s) => s.skill_name),
-      preferredDay: p.preferred_day ? DAYS[p.preferred_day - 1] : emptyDraft.preferredDay,
-      preferredFrom: p.preferred_start_time?.slice(0, 5) || emptyDraft.preferredFrom,
-      preferredTo: p.preferred_end_time?.slice(0, 5) || emptyDraft.preferredTo,
     },
   };
 }
@@ -338,8 +330,6 @@ export async function getProjectFormData(editId?: string): Promise<ProjectFormDa
       experienceLevels: EXPERIENCE_LEVELS.map((e) => e.label),
       languages: LANGUAGES,
       skills: skills.map((s) => s.skill_name),
-      days: DAYS,
-      times: TIMES,
       sessionTimes: SESSION_TIMES,
     },
   };
@@ -359,9 +349,6 @@ function projectFields(draft: ProjectDraft) {
     end_date: dates.at(-1) ?? null,
     volunteers_needed: Number(draft.volunteersRequired) || null,
     min_experience_years: EXPERIENCE_LEVELS.find((e) => e.label === draft.minExperience)?.years ?? null,
-    preferred_day: DAYS.indexOf(draft.preferredDay) + 1 || null,
-    preferred_start_time: draft.preferredFrom ? `${draft.preferredFrom}:00` : null,
-    preferred_end_time: draft.preferredTo ? `${draft.preferredTo}:00` : null,
   };
 }
 
